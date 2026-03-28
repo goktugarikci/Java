@@ -1,3 +1,4 @@
+
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
@@ -25,9 +26,7 @@ public class GirisSecimEkrani extends JFrame {
 
         // --- SIMGE DURUMU SORUNU İÇİN ÖZEL DİNLEYİCİ ---
         this.addWindowStateListener(e -> {
-            // Eğer simge durumundan (iconified) normal duruma geçildiyse
             if ((e.getOldState() & Frame.ICONIFIED) != 0 && (e.getNewState() & Frame.ICONIFIED) == 0) {
-                // Yeniden tam ekran yapmayı zorla
                 setExtendedState(JFrame.MAXIMIZED_BOTH);
             }
         });
@@ -58,7 +57,6 @@ public class GirisSecimEkrani extends JFrame {
         JButton btnSimge = butonOlustur("_", new Color(60, 60, 60));
         JButton btnKapat = butonOlustur("X", new Color(180, 40, 40));
 
-        // Simge Durumu Butonu İşlemi
         btnSimge.addActionListener(e -> setExtendedState(JFrame.ICONIFIED));
         btnKapat.addActionListener(e -> System.exit(0));
 
@@ -75,8 +73,16 @@ public class GirisSecimEkrani extends JFrame {
         JButton btnYetkili = anaButonOlustur("YETKİLİ GİRİŞİ", new Color(70, 130, 180));
         JButton btnPersonel = anaButonOlustur("PERSONEL GİRİŞİ", new Color(46, 139, 87));
 
-        btnYetkili.addActionListener(e -> new LoginEkrani("YETKİLİ").setVisible(true));
-        btnPersonel.addActionListener(e -> new LoginEkrani("PERSONEL").setVisible(true));
+        // --- KRİTİK DÜZELTME BURASI: this.dispose() EKLENDİ ---
+        btnYetkili.addActionListener(e -> {
+            new LoginEkrani("Admin").setVisible(true); // LoginEkrani 'Admin' veya 'Personel' bekliyor
+            this.dispose(); // Seçim ekranını kapat
+        });
+
+        btnPersonel.addActionListener(e -> {
+            new LoginEkrani("Personel").setVisible(true);
+            this.dispose(); // Seçim ekranını kapat
+        });
 
         ortaPanel.add(btnYetkili);
         ortaPanel.add(btnPersonel);
@@ -115,7 +121,9 @@ public class GirisSecimEkrani extends JFrame {
     }
 
     private void sunucuKontrolBaslat() {
-        new Thread(() -> {
+        // İkinci Düzeltme: Thread'i Daemon (Arka plan) yaptık. 
+        // Böylece pencere kapanınca bu döngü RAM'de sonsuza dek çalışmaya devam etmez.
+        Thread t = new Thread(() -> {
             while (true) {
                 try (Socket s = new Socket("localhost", 8080)) {
                     lblSunucuDurum.setText("● SUNUCU AKTİF ");
@@ -126,7 +134,9 @@ public class GirisSecimEkrani extends JFrame {
                 }
                 try { Thread.sleep(5000); } catch (InterruptedException ignored) {}
             }
-        }).start();
+        });
+        t.setDaemon(true); 
+        t.start();
     }
 
     private JButton anaButonOlustur(String text, Color bg) {

@@ -83,6 +83,14 @@ public class DatabaseManager {
                     "MasaID INTEGER PRIMARY KEY AUTOINCREMENT, " +
                     "MasaAdi TEXT NOT NULL UNIQUE, " +
                     "Durum TEXT DEFAULT 'BOS');"); // BOS, DOLU, REZERVE
+            // YENİ: Gerçek Zamanlı Mutfak Siparişleri Tablosu
+            stmt.execute("CREATE TABLE IF NOT EXISTS Siparisler_Mutfak (" +
+                    "OrderID INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                    "MasaIsmi TEXT, " +
+                    "MusteriIsmi TEXT, " +
+                    "Durum TEXT DEFAULT 'BEKLEMEDE', " +
+                    "FisHTML TEXT, " +
+                    "SiparisZamani DATETIME DEFAULT CURRENT_TIMESTAMP);");
             ilkAdminKoy(conn);
             System.out.println("Veritabanı Sistemi: Yeni Modifikatör (Malzeme) altyapısı aktif.");
             
@@ -579,5 +587,78 @@ public class DatabaseManager {
         try (Connection conn = DriverManager.getConnection(URL); PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, masaAdi); pstmt.executeUpdate(); return "BAŞARILI|Masa silindi: " + masaAdi;
         } catch (Exception e) { return "HATA|Masa silinemedi: " + e.getMessage(); }
+    }
+    // ==========================================
+    // MUTFAK VE SİPARİŞ HABERLEŞME METOTLARI
+    // ==========================================
+    public static String siparisOlustur(String masaIsmi, String musteriIsmi, String fisHTML) {
+        String sql = "INSERT INTO Siparisler_Mutfak (MasaIsmi, MusteriIsmi, FisHTML) VALUES (?, ?, ?)";
+        try (Connection conn = DriverManager.getConnection(URL); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, masaIsmi);
+            pstmt.setString(2, musteriIsmi);
+            pstmt.setString(3, fisHTML);
+            pstmt.executeUpdate();
+            return "BAŞARILI|Sipariş Mutfağa İletildi!";
+        } catch (Exception e) { return "HATA|Sipariş oluşturulamadı: " + e.getMessage(); }
+    }
+
+    public static String mutfakSiparisleriGetir() {
+        // Mutfak sadece BEKLEMEDE ve HAZIRLANIYOR olanları görür
+        StringBuilder sb = new StringBuilder("MUTFAK_VERI|");
+        String sql = "SELECT OrderID, MasaIsmi, Durum, FisHTML FROM Siparisler_Mutfak WHERE Durum IN ('BEKLEMEDE', 'HAZIRLANIYOR') ORDER BY OrderID ASC";
+        try (Connection conn = DriverManager.getConnection(URL); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                // Verileri ~_~ ile, Siparişleri ise ||| ile ayırıyoruz (HTML kodları karışmasın diye)
+                sb.append(rs.getInt("OrderID")).append("~_~")
+                  .append(rs.getString("MasaIsmi")).append("~_~")
+                  .append(rs.getString("Durum")).append("~_~")
+                  .append(rs.getString("FisHTML")).append("|||");
+            }
+            return sb.toString();
+        } catch (Exception e) { return "HATA|Mutfak verisi çekilemedi: " + e.getMessage(); }
+    }
+    public static String mutfakSiparisleriGetirFull() {
+        StringBuilder sb = new StringBuilder("MUTFAK_FULL_VERI|");
+        // Sadece bugünün BEKLEMEDE, HAZIRLANIYOR ve yeni tamamlanmış (HAZIR) siparişleri
+        String sql = "SELECT OrderID, MasaIsmi, Durum, FisHTML FROM Siparisler_Mutfak " +
+                    "WHERE Durum IN ('BEKLEMEDE', 'HAZIRLANIYOR', 'HAZIR') " +
+                    "AND date(SiparisZamani) = date('now') ORDER BY OrderID DESC";
+        try (Connection conn = DriverManager.getConnection(URL); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                sb.append(rs.getInt("OrderID")).append("~_~")
+                .append(rs.getString("MasaIsmi")).append("~_~")
+                .append(rs.getString("Durum")).append("~_~")
+                .append(rs.getString("FisHTML")).append("|||");
+            }
+            return sb.toString();
+        } catch (Exception e) { return "HATA|" + e.getMessage(); }
+    }
+// ==========================================
+    // KASA VE ÖDEME İŞLEMLERİ
+    // ==========================================
+    public static String kasaSiparisleriGetir() {
+        StringBuilder sb = new StringBuilder("KASA_VERI|");
+        // Kasada sadece henüz ödenmemiş veya iptal edilmemiş aktif siparişler görünür.
+        String sql = "SELECT OrderID, MasaIsmi, MusteriIsmi, Durum, FisHTML FROM Siparisler_Mutfak WHERE Durum NOT IN ('ODENDI', 'IPTAL') ORDER BY OrderID DESC";
+        try (Connection conn = DriverManager.getConnection(URL); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                sb.append(rs.getInt("OrderID")).append("~_~")
+                  .append(rs.getString("MasaIsmi")).append("~_~")
+                  .append(rs.getString("MusteriIsmi")).append("~_~")
+                  .append(rs.getString("Durum")).append("~_~")
+                  .append(rs.getString("FisHTML")).append("|||");
+            }
+            return sb.toString();
+        } catch (Exception e) { return "HATA|Kasa verisi çekilemedi: " + e.getMessage(); }
+    }
+
+    public static String siparisOdemeAl(int orderId, String odemeTuru) {
+        String sql = "UPDATE Siparisler_Mutfak SET Durum = 'ODENDI' WHERE OrderID = ?";
+        try (Connection conn = DriverManager.getConnection(URL); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, orderId);
+            pstmt.executeUpdate();
+            // Not: İleride burada 'Kasa_Hareketleri' tablosuna "Kredi Kartı" veya "Nakit" olarak ciro kaydı eklenebilir.
+            return "BAŞARILI|Sipariş başarıyla kapatıldı (" + odemeTuru + ").";
+        } catch (Exception e) { return "HATA|Ödeme alınamadı: " + e.getMessage(); }
     }
 }

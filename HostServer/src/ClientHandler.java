@@ -150,12 +150,6 @@ public class ClientHandler implements Runnable {
                 case "KULLANICI_SIL":
                     if (parcalar.length >= 2) return DatabaseManager.kullaniciSil(parcalar[1]);
                     return "HATA|Eksik parametre!";
-                case "SIPARIS_DURUM_GUNCELLE":
-                    // Format: SIPARIS_DURUM_GUNCELLE|OrderID|YENI_DURUM (Örn: HAZIRLANIYOR, IPTAL, ODENDI)
-                    if (parcalar.length >= 3) {
-                        return DatabaseManager.siparisDurumuGuncelle(Integer.parseInt(parcalar[1]), parcalar[2]);
-                    }
-                    return "HATA|Eksik parametre!";
                 case "MASA_EKLE":
                     if (parcalar.length >= 2) return DatabaseManager.masaEkle(parcalar[1]);
                     return "HATA|Eksik parametre!";
@@ -184,6 +178,32 @@ public class ClientHandler implements Runnable {
                     // Format: KULLANICI_GUNCELLE|EskiKAdi|YeniKAdi|Sifre|Ad|Soyad|Rol|Email|Tel|Adres
                     if (parcalar.length >= 10) {
                         return DatabaseManager.kullaniciGuncelle(parcalar[1], parcalar[2], parcalar[3], parcalar[4], parcalar[5], parcalar[6], parcalar[7], parcalar[8], parcalar[9]);
+                    }
+                    return "HATA|Eksik parametre!";
+                case "SIPARIS_OLUSTUR":
+                    // Format: SIPARIS_OLUSTUR|MasaIsmi|MusteriIsmi|FisHTML
+                    if (parcalar.length >= 4) {
+                        return DatabaseManager.siparisOlustur(parcalar[1], parcalar[2], komut.substring(komut.indexOf(parcalar[3]))); 
+                        // substring kullanıyoruz çünkü FisHTML içinde | karakteri olabilir, parçalanmasını istemiyoruz.
+                    }
+                    return "HATA|Eksik parametre!";
+
+                case "MUTFAK_SIPARIS_GETIR":
+                    return DatabaseManager.mutfakSiparisleriGetir();
+
+                case "SIPARIS_DURUM_GUNCELLE":
+                    // Format: SIPARIS_DURUM_GUNCELLE|OrderID|YENI_DURUM
+                    if (parcalar.length >= 3) {
+                        return DatabaseManager.siparisDurumuGuncelle(Integer.parseInt(parcalar[1]), parcalar[2]);
+                    }
+                    return "HATA|Eksik parametre!";
+                case "KASA_SIPARIS_GETIR":
+                    return DatabaseManager.kasaSiparisleriGetir();
+
+                case "SIPARIS_ODEME_AL":
+                    // Format: SIPARIS_ODEME_AL|OrderID|Nakit(veya Kredi Kartı)
+                    if (parcalar.length >= 3) {
+                        return DatabaseManager.siparisOdemeAl(Integer.parseInt(parcalar[1]), parcalar[2]);
                     }
                     return "HATA|Eksik parametre!";
                 // ==========================================

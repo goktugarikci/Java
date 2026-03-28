@@ -1,12 +1,1 @@
-Kullanıcılar
--UserName (Notnull, Unique)
--Password (Notnull)
--FirstName (Notnull)
--LastName (Notnull)
--Role (Notnull) (Admin, Staff, Personel)
--Email (Notnull, Unique)
--Phone (Notnull, Unique)
--Address (Notnull)
-
-
 Giriş Seçim Ekranı Tekrar Tekrar Açılıyor giriş yapıldıktan sonra o ekran kapatılacaktır ve eğer tekrardan açılması istenirse o ekran kapatılıp tekrar açılabilir.
