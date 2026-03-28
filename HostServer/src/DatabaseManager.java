@@ -1,99 +1,85 @@
-package src;
+package src; // VS Code paket hatası verirse bu satırı silin
 
 import java.sql.*;
 
 public class DatabaseManager {
     private static final String URL = "jdbc:sqlite:uygulama_veritabani.db";
 
-    /**
-     * Uygulama başladığında tabloları ve ilişkileri kurar.
-     */
+    // ==========================================
+    // 1. VERİTABANI VE TABLO KURULUMU
+    // ==========================================
     public static void initialize() {
         try (Connection conn = DriverManager.getConnection(URL);
              Statement stmt = conn.createStatement()) {
             
-            // SQLite'ta Foreign Key desteğini açıyoruz
+            // Yabancı anahtar (Foreign Key) desteğini aktif et
             stmt.execute("PRAGMA foreign_keys = ON;");
 
-            // 1. Kullanicilar Tablosu
+            // Kullanicilar
             stmt.execute("CREATE TABLE IF NOT EXISTS Kullanicilar (" +
                     "UserID INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "UserName TEXT NOT NULL UNIQUE, " +
-                    "Password TEXT NOT NULL, " +
-                    "FirstName TEXT, " +
-                    "LastName TEXT, " +
-                    "Role TEXT, " + // Admin, Staff, Personel
-                    "Email TEXT, " +
-                    "Phone TEXT, " +
-                    "Address TEXT);");
+                    "UserName TEXT NOT NULL UNIQUE, Password TEXT NOT NULL, " +
+                    "FirstName TEXT, LastName TEXT, Role TEXT, " +
+                    "Email TEXT, Phone TEXT, Address TEXT);");
 
-            // 2. Kategoriler Tablosu
+            // Kategoriler
             stmt.execute("CREATE TABLE IF NOT EXISTS Kategoriler (" +
                     "CategoryID INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "CategoryName TEXT NOT NULL UNIQUE, " +
-                    "Description TEXT);");
+                    "CategoryName TEXT NOT NULL UNIQUE, Description TEXT);");
 
-            // 3. Urunler Tablosu (Stok Takibi Dahil)
+            // Urunler Tablosu (Artık Ingredients sütunu yok, Malzemeler ayrı tabloda)
             stmt.execute("CREATE TABLE IF NOT EXISTS Urunler (" +
                     "ProductID INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "CategoryID INTEGER, " +
-                    "ProductName TEXT NOT NULL, " +
-                    "Description TEXT, " +
-                    "Price REAL, " +
-                    "Stock INTEGER DEFAULT 0, " +
-                    "KdvRate REAL, " +
+                    "CategoryID INTEGER, ProductName TEXT NOT NULL, " +
+                    "Description TEXT, Price REAL, Stock INTEGER DEFAULT 0, " +
+                    "KdvRate REAL DEFAULT 18, ImagePath TEXT, " +
                     "FOREIGN KEY(CategoryID) REFERENCES Kategoriler(CategoryID));");
 
-            // 4. Siparisler Tablosu (Gelişmiş Tip ve Durum Takibi)
-            stmt.execute("CREATE TABLE IF NOT EXISTS Siparisler (" +
-                    "OrderID INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "UserID INTEGER, " +
-                    "OrderType TEXT, " + // MASA, PAKET_SERVIS, GEL_AL
-                    "TableNumber TEXT, " + // Masa Numarası (Opsiyonel)
-                    "Status TEXT DEFAULT 'BEKLEMEDE', " + // BEKLEMEDE, HAZIRLANIYOR, HAZIR, TESLIM_EDILDI, IPTAL, KASA_KAPATILDI
-                    "OrderDate DATETIME DEFAULT CURRENT_TIMESTAMP, " +
-                    "TotalPrice REAL DEFAULT 0, " +
-                    "PaymentType TEXT, " + // Nakit, Kredi Kartı
-                    "FOREIGN KEY(UserID) REFERENCES Kullanicilar(UserID));");
-
-            // 5. Siparis_Detaylari
-            stmt.execute("CREATE TABLE IF NOT EXISTS Siparis_Detaylari (" +
-                    "DetailID INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "OrderID INTEGER, " +
-                    "ProductID INTEGER, " +
-                    "Quantity INTEGER, " +
-                    "UnitPrice REAL, " +
-                    "FOREIGN KEY(OrderID) REFERENCES Siparisler(OrderID), " +
-                    "FOREIGN KEY(ProductID) REFERENCES Urunler(ProductID));");
-
-            // 6. Siparis_Zaman_Loglari (Performans Analizi İçin)
-            stmt.execute("CREATE TABLE IF NOT EXISTS Siparis_Zaman_Loglari (" +
-                    "LogID INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "OrderID INTEGER, " +
-                    "Status TEXT, " +
-                    "IslemZamani DATETIME DEFAULT CURRENT_TIMESTAMP, " +
-                    "FOREIGN KEY(OrderID) REFERENCES Siparisler(OrderID));");
-
-            // 7. Gunluk_Raporlar (Z Raporu ve Hata Takibi İçin)
-            stmt.execute("CREATE TABLE IF NOT EXISTS Gunluk_Raporlar (" +
-                    "RaporID INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "RaporTarihi DATETIME DEFAULT CURRENT_TIMESTAMP, " +
-                    "ToplamCiro REAL, " +
-                    "StokHatalari TEXT, " + // Eksiye düşen stoklar burada raporlanır
-                    "KapatanAdmin TEXT);");
-            // Ürünlerin standart içeriği ve eklenebilir ekstraları
+            // YENİ: Urun_Malzemeleri Tablosu (Ekle/Çıkar Modifikatörleri İçin)
             stmt.execute("CREATE TABLE IF NOT EXISTS Urun_Malzemeleri (" +
                     "MalzemeID INTEGER PRIMARY KEY AUTOINCREMENT, " +
                     "ProductID INTEGER, " +
-                    "MalzemeAdi TEXT, " +
-                    "VarsayilanVarMi BOOLEAN DEFAULT 1, " + // Üründe standart olarak var mı?
-                    "EkstraUcret REAL DEFAULT 0, " +        // Ekstra eklenirse maliyeti
+                    "MalzemeAdi TEXT NOT NULL, " +
+                    "VarsayilanVarMi INTEGER DEFAULT 1, " + // 1: Standart (İçinde var, çıkarılabilir), 0: Ekstra (Eklenebilir)
+                    "EkstraUcret REAL DEFAULT 0, " +
+                    "FOREIGN KEY(ProductID) REFERENCES Urunler(ProductID) ON DELETE CASCADE);");
+
+            // Siparisler
+            stmt.execute("CREATE TABLE IF NOT EXISTS Siparisler (" +
+                    "OrderID INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                    "UserID INTEGER, OrderType TEXT, TableNumber TEXT, " +
+                    "Status TEXT DEFAULT 'BEKLEMEDE', OrderDate DATETIME DEFAULT CURRENT_TIMESTAMP, " +
+                    "TotalPrice REAL DEFAULT 0, PaymentType TEXT, " +
+                    "FOREIGN KEY(UserID) REFERENCES Kullanicilar(UserID));");
+
+            // Siparis Detaylari
+            stmt.execute("CREATE TABLE IF NOT EXISTS Siparis_Detaylari (" +
+                    "DetailID INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                    "OrderID INTEGER, ProductID INTEGER, " +
+                    "Quantity INTEGER, UnitPrice REAL, " +
+                    "Modifiers TEXT, " + // Siparişteki özel istekler (Örn: "-Soğan, +Ekstra Sos")
+                    "FOREIGN KEY(OrderID) REFERENCES Siparisler(OrderID), " +
                     "FOREIGN KEY(ProductID) REFERENCES Urunler(ProductID));");
 
-            // Varsayılan yöneticiyi ekle
+            // Zaman Logları ve Günlük Raporlar
+            stmt.execute("CREATE TABLE IF NOT EXISTS Siparis_Zaman_Loglari (" +
+                    "LogID INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                    "OrderID INTEGER, Status TEXT, IslemZamani DATETIME DEFAULT CURRENT_TIMESTAMP, " +
+                    "FOREIGN KEY(OrderID) REFERENCES Siparisler(OrderID));");
+
+            stmt.execute("CREATE TABLE IF NOT EXISTS Gunluk_Raporlar (" +
+                    "RaporID INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                    "RaporTarihi DATETIME DEFAULT CURRENT_TIMESTAMP, " +
+                    "ToplamCiro REAL, StokHatalari TEXT, KapatanAdmin TEXT);");
+            // YENİ: Vestiyer Tablosu (Sadece Masalar İçin)
+            stmt.execute("CREATE TABLE IF NOT EXISTS Vestiyer_Kayitlari (" +
+                    "IslemID INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                    "MasaNo TEXT NOT NULL, " +
+                    "AskiNumarasi TEXT NOT NULL, " +
+                    "Durum TEXT DEFAULT 'TESLIM_ALINDI', " + // TESLIM_ALINDI veya IADE_EDILDI
+                    "KayitZamani DATETIME DEFAULT CURRENT_TIMESTAMP);");
             ilkAdminKoy(conn);
-            
-            System.out.println("Veritabanı Sistemi: Tüm modüller güncel ve aktif.");
+            System.out.println("Veritabanı Sistemi: Yeni Modifikatör (Malzeme) altyapısı aktif.");
             
         } catch (Exception e) {
             System.err.println("Veritabanı Başlatma Hatası: " + e.getMessage());
@@ -103,137 +89,248 @@ public class DatabaseManager {
     private static void ilkAdminKoy(Connection conn) {
         String sql = "INSERT OR IGNORE INTO Kullanicilar (UserName, Password, Role, FirstName, LastName) " +
                      "VALUES ('admin', 'admin123', 'Admin', 'Sistem', 'Yöneticisi')";
-        try (Statement stmt = conn.createStatement()) {
-            stmt.execute(sql);
-        } catch (Exception ignored) {}
+        try (Statement stmt = conn.createStatement()) { stmt.execute(sql); } catch (Exception ignored) {}
     }
 
-    // --- KASA KAPATMA MANTIĞI (SİSTEM SIFIRLAMA) ---
-    public static String kasaKapat(String adminIsmi) {
-        try (Connection conn = DriverManager.getConnection(URL)) {
-            // 1. Kural: Tamamlanmamış (Aktif) sipariş var mı kontrol et
-            String aktifSiparisSorgu = "SELECT COUNT(*) FROM Siparisler WHERE Status NOT IN ('TESLIM_EDILDI', 'IPTAL', 'KASA_KAPATILDI')";
-            try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(aktifSiparisSorgu)) {
-                if (rs.next() && rs.getInt(1) > 0) {
-                    return "HATA|İçeride hala " + rs.getInt(1) + " adet aktif sipariş var. Kasa kapatılamaz!";
-                }
-            }
-
-            // 2. Analiz: Stokta eksiye düşen ürünleri yakala (Geçmişe dönük rapor için)
-            StringBuilder stokHatalari = new StringBuilder();
-            String stokSorgu = "SELECT ProductName, Stock FROM Urunler WHERE Stock < 0";
-            try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(stokSorgu)) {
-                while (rs.next()) {
-                    stokHatalari.append(rs.getString("ProductName")).append(" (").append(rs.getInt("Stock")).append("), ");
-                }
-            }
-
-            // 3. Ciro Hesapla
-            double toplamCiro = 0;
-            String ciroSorgu = "SELECT SUM(TotalPrice) FROM Siparisler WHERE Status = 'TESLIM_EDILDI'";
-            try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(ciroSorgu)) {
-                if (rs.next()) toplamCiro = rs.getDouble(1);
-            }
-
-            // 4. Günlük Raporu Kaydet
-            String raporSql = "INSERT INTO Gunluk_Raporlar (ToplamCiro, StokHatalari, KapatanAdmin) VALUES (?, ?, ?)";
-            try (PreparedStatement pstmt = conn.prepareStatement(raporSql)) {
-                pstmt.setDouble(1, toplamCiro);
-                pstmt.setString(2, stokHatalari.toString().isEmpty() ? "Hata Yok" : stokHatalari.toString());
-                pstmt.setString(3, adminIsmi);
-                pstmt.executeUpdate();
-            }
-
-            // 5. Siparişleri 'KASA_KAPATILDI' olarak işaretleyerek yeni günü temizle
-            conn.createStatement().execute("UPDATE Siparisler SET Status = 'KASA_KAPATILDI' WHERE Status = 'TESLIM_EDILDI'");
-
-            return "BAŞARILI|Gün sonu alındı. Toplam Ciro: " + toplamCiro + " TL. Arşivleme tamam.";
-
-        } catch (Exception e) {
-            return "HATA|Kasa kapatma işlemi başarısız: " + e.getMessage();
-        }
-    }
-
-    // --- KULLANICI EKLEME (GENİŞLETİLMİŞ) ---
-    public static String kullaniciEkle(String user, String pass, String ad, String soyad, String rol, String email, String tel, String adres) {
-        String sql = "INSERT INTO Kullanicilar (UserName, Password, FirstName, LastName, Role, Email, Phone, Address) VALUES (?,?,?,?,?,?,?,?)";
-        try (Connection conn = DriverManager.getConnection(URL);
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, user); pstmt.setString(2, pass);
-            pstmt.setString(3, ad); pstmt.setString(4, soyad);
-            pstmt.setString(5, rol); pstmt.setString(6, email);
-            pstmt.setString(7, tel); pstmt.setString(8, adres);
-            pstmt.executeUpdate();
-            return "BAŞARILI|Yeni kullanıcı sisteme tanımlandı.";
-        } catch (Exception e) {
-            return "HATA|Kullanıcı eklenemedi: " + e.getMessage();
-        }
-    }
-
-    // --- GİRİŞ KONTROLÜ ---
+    // ==========================================
+    // 2. KULLANICI VE GİRİŞ İŞLEMLERİ
+    // ==========================================
     public static String girisYap(String user, String pass) {
         String sql = "SELECT Role, FirstName, LastName FROM Kullanicilar WHERE UserName = ? AND Password = ?";
         try (Connection conn = DriverManager.getConnection(URL);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, user);
-            pstmt.setString(2, pass);
+            pstmt.setString(1, user); pstmt.setString(2, pass);
             ResultSet rs = pstmt.executeQuery();
-            if (rs.next()) {
-                return "BAŞARILI|" + rs.getString("Role") + "|" + rs.getString("FirstName") + " " + rs.getString("LastName");
-            }
+            if (rs.next()) return "BAŞARILI|" + rs.getString("Role") + "|" + rs.getString("FirstName") + " " + rs.getString("LastName");
             return "HATA|Kullanıcı adı veya şifre yanlış.";
-        } catch (Exception e) {
-            return "HATA|Veritabanı hatası.";
-        }
+        } catch (Exception e) { return "HATA|Veritabanı hatası."; }
     }
-    // --- KATEGORİ EKLEME METODU ---
-    public static String kategoriEkle(String categoryName, String description) {
-        String sql = "INSERT INTO Kategoriler (CategoryName, Description) VALUES (?, ?)";
-        
+
+    public static String kullaniciEkle(String user, String pass, String ad, String soyad, String rol, String email, String tel, String adres) {
+        String sql = "INSERT INTO Kullanicilar (UserName, Password, FirstName, LastName, Role, Email, Phone, Address) VALUES (?,?,?,?,?,?,?,?)";
         try (Connection conn = DriverManager.getConnection(URL);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            
-            pstmt.setString(1, categoryName);
-            pstmt.setString(2, description);
-            
+            pstmt.setString(1, user); pstmt.setString(2, pass); pstmt.setString(3, ad); pstmt.setString(4, soyad);
+            pstmt.setString(5, rol); pstmt.setString(6, email); pstmt.setString(7, tel); pstmt.setString(8, adres);
             pstmt.executeUpdate();
+            return "BAŞARILI|Yeni kullanıcı sisteme tanımlandı.";
+        } catch (Exception e) { return "HATA|Kullanıcı eklenemedi: " + e.getMessage(); }
+    }
+
+    public static String kullanicilariGetir() {
+        StringBuilder sb = new StringBuilder("KULLANICI_LISTESI");
+        String sql = "SELECT UserID, UserName, FirstName, Role FROM Kullanicilar";
+        try (Connection conn = DriverManager.getConnection(URL);
+             Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                sb.append("|").append(rs.getInt("UserID")).append(";")
+                  .append(rs.getString("UserName")).append(";")
+                  .append(rs.getString("FirstName")).append(";")
+                  .append(rs.getString("Role"));
+            }
+            return sb.toString();
+        } catch (Exception e) { return "HATA|" + e.getMessage(); }
+    }
+
+// 1. DAHA GÜÇLÜ KOLON KONTROLÜ (Eğer veritabanı kilitliyse bile dener)
+    private static void kolonlariKontrolEt() {
+        try (Connection conn = DriverManager.getConnection(URL); Statement stmt = conn.createStatement()) {
+            stmt.execute("ALTER TABLE Urunler ADD COLUMN Ingredients TEXT;");
+        } catch (Exception ignored) {} 
+        
+        try (Connection conn = DriverManager.getConnection(URL); Statement stmt = conn.createStatement()) {
+            stmt.execute("ALTER TABLE Urunler ADD COLUMN ImagePath TEXT;");
+        } catch (Exception ignored) {}
+        
+        try (Connection conn = DriverManager.getConnection(URL); Statement stmt = conn.createStatement()) {
+            stmt.execute("ALTER TABLE Kategoriler ADD COLUMN ImagePath TEXT;");
+        } catch (Exception ignored) {}
+    }
+
+    // 2. Kategori Ekleme Metodu (Güncellendi)
+    public static String kategoriEkle(String categoryName, String description, String imagePath) {
+        String sql = "INSERT INTO Kategoriler (CategoryName, Description, ImagePath) VALUES (?, ?, ?)";
+        try (Connection conn = DriverManager.getConnection(URL); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, categoryName); 
+            pstmt.setString(2, description);
+            pstmt.setString(3, imagePath);
+            pstmt.executeUpdate(); 
             return "BAŞARILI|Kategori eklendi: " + categoryName;
+        } catch (Exception e) { return "HATA|Kategori eklenemedi: " + e.getMessage(); }
+    }
+
+// 2. KURŞUN GEÇİRMEZ KATEGORİ GETİRME METODU
+    public static String kategorileriGetir() {
+        kolonlariKontrolEt(); // Her ihtimale karşı çağırıp sütunun eklendiğinden emin oluyoruz
+        
+        StringBuilder sb = new StringBuilder("KAT_LISTESI");
+        try (Connection conn = DriverManager.getConnection(URL);
+             Statement stmt = conn.createStatement()) {
             
-        } catch (Exception e) {
-            return "HATA|Kategori eklenemedi: " + e.getMessage();
+            // Eğer sütun kilitlenmeden dolayı eklenemediyse sistemin çökmemesi için akıllı kontrol yapıyoruz
+            boolean gorselSutunuVarMi = true;
+            try { stmt.executeQuery("SELECT ImagePath FROM Kategoriler LIMIT 1"); } 
+            catch (Exception e) { gorselSutunuVarMi = false; } // Sütun yoksa false dön
+
+            // Sütun varsa görselle çek, yoksa sadece isimle çek
+            String sql = gorselSutunuVarMi ? "SELECT CategoryName, ImagePath FROM Kategoriler" : "SELECT CategoryName FROM Kategoriler";
+            ResultSet rs = stmt.executeQuery(sql);
+            
+            while (rs.next()) { 
+                String ad = rs.getString("CategoryName");
+                String img = gorselSutunuVarMi ? rs.getString("ImagePath") : "gorsel_yok.png";
+                // Format: KategoriAdı;GörselYolu
+                sb.append("|").append(ad).append(";").append(img == null ? "gorsel_yok.png" : img); 
+            }
+            return sb.toString();
+        } catch (Exception e) { 
+            return "HATA|Kategoriler çekilemedi: " + e.getMessage(); 
         }
     }
 
-    // --- ÜRÜN EKLEME METODU ---
-    public static String urunEkle(int categoryId, String productName, String description, double price, int stock, double kdvRate) {
-        String sql = "INSERT INTO Urunler (CategoryID, ProductName, Description, Price, Stock, KdvRate) VALUES (?, ?, ?, ?, ?, ?)";
+    // 4. Kategori Güncelleme Metodu (Güncellendi)
+    public static String kategoriGuncelle(String eskiAd, String yeniAd, String imagePath) {
+        String sql = "UPDATE Kategoriler SET CategoryName = ?, ImagePath = ? WHERE CategoryName = ?";
+        try (Connection conn = DriverManager.getConnection(URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, yeniAd);
+            pstmt.setString(2, imagePath);
+            pstmt.setString(3, eskiAd);
+            int affectedRows = pstmt.executeUpdate();
+            if (affectedRows > 0) return "BAŞARILI|Kategori güncellendi.";
+            return "HATA|Kategori bulunamadı.";
+        } catch (Exception e) { return "HATA|Kategori güncellenemedi: " + e.getMessage(); }
+    }
+    // ==========================================
+    // 4. GELİŞMİŞ ÜRÜN VE MODİFİKATÖR İŞLEMLERİ
+    // ==========================================
+    
+    /**
+     * malzemelerStr Formatı: "MalzemeAdi:VarsayilanMi:Fiyat, MalzemeAdi2:VarsayilanMi:Fiyat"
+     * Örnek: "Domates:1:0.0, Ekstra Kaşar:0:15.5" (1=Standart İçerik, 0=Ekstra Ücretli)
+     */
+    public static String urunEkleDetayli(String katAdi, String urunAdi, double fiyat, String aciklama, String gorsel, String malzemelerStr) {
+        String idSorgu = "SELECT CategoryID FROM Kategoriler WHERE CategoryName = ?";
+        String urunSql = "INSERT INTO Urunler (CategoryID, ProductName, Price, Description, ImagePath, Stock) VALUES (?, ?, ?, ?, ?, 100)";
+        String malzemeSql = "INSERT INTO Urun_Malzemeleri (ProductID, MalzemeAdi, VarsayilanVarMi, EkstraUcret) VALUES (?, ?, ?, ?)";
+        
+        try (Connection conn = DriverManager.getConnection(URL)) {
+            int katId = -1;
+            try (PreparedStatement pstmtId = conn.prepareStatement(idSorgu)) {
+                pstmtId.setString(1, katAdi);
+                ResultSet rs = pstmtId.executeQuery();
+                if (rs.next()) katId = rs.getInt("CategoryID");
+            }
+            if (katId == -1) return "HATA|Kategori bulunamadı!";
+
+            // Ürünü Ekle ve Oluşturulan Ürün ID'sini Al
+            int productId = -1;
+            try (PreparedStatement pstmt = conn.prepareStatement(urunSql, Statement.RETURN_GENERATED_KEYS)) {
+                pstmt.setInt(1, katId); pstmt.setString(2, urunAdi);
+                pstmt.setDouble(3, fiyat); pstmt.setString(4, aciklama);
+                pstmt.setString(5, gorsel);
+                pstmt.executeUpdate();
+                
+                try (ResultSet generatedKeys = pstmt.getGeneratedKeys()) {
+                    if (generatedKeys.next()) {
+                        productId = generatedKeys.getInt(1);
+                    }
+                }
+            }
+
+            // Eğer malzeme dizesi boş değilse parçala ve malzeme tablosuna ekle
+            if (productId != -1 && malzemelerStr != null && !malzemelerStr.isEmpty() && !malzemelerStr.equals("null")) {
+                try (PreparedStatement pMat = conn.prepareStatement(malzemeSql)) {
+                    String[] malzemeler = malzemelerStr.split(",");
+                    for (String m : malzemeler) {
+                        String[] mDetay = m.split(":");
+                        if (mDetay.length == 3) {
+                            pMat.setInt(1, productId);
+                            pMat.setString(2, mDetay[0].trim()); // Malzeme Adı
+                            pMat.setInt(3, Integer.parseInt(mDetay[1].trim())); // 1 veya 0
+                            pMat.setDouble(4, Double.parseDouble(mDetay[2].trim())); // Ekstra Ücret
+                            pMat.addBatch();
+                        }
+                    }
+                    pMat.executeBatch(); // Tüm malzemeleri tek seferde kaydet
+                }
+            }
+
+            return "BAŞARILI|Ürün ve interaktif malzemeler başarıyla kaydedildi!";
+        } catch (Exception e) { return "HATA|Kayıt hatası: " + e.getMessage(); }
+    }
+
+    public static String urunleriDetayliGetir(String katAdi) {
+        StringBuilder sb = new StringBuilder("URUN_LISTESI_DETAYLI");
+        // GROUP_CONCAT ile malzemeleri tek bir sütunda çekiyoruz (Ad:Standart:Fiyat, Ad:Standart:Fiyat...)
+        String sql = "SELECT u.ProductID, u.ProductName, u.Price, u.Description, u.Stock, u.ImagePath, " +
+                     "(SELECT GROUP_CONCAT(MalzemeAdi || ':' || VarsayilanVarMi || ':' || EkstraUcret, ',') " +
+                     " FROM Urun_Malzemeleri WHERE ProductID = u.ProductID) AS Malzemeler " +
+                     "FROM Urunler u JOIN Kategoriler k ON u.CategoryID = k.CategoryID " +
+                     "WHERE k.CategoryName = ?";
         
         try (Connection conn = DriverManager.getConnection(URL);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, katAdi);
+            ResultSet rs = pstmt.executeQuery();
             
-            pstmt.setInt(1, categoryId);
-            pstmt.setString(2, productName);
-            pstmt.setString(3, description);
-            pstmt.setDouble(4, price);
-            pstmt.setInt(5, stock);
-            pstmt.setDouble(6, kdvRate);
-            
-            pstmt.executeUpdate();
-            return "BAŞARILI|Ürün eklendi: " + productName;
-            
-        } catch (Exception e) {
-            return "HATA|Ürün eklenemedi: " + e.getMessage();
-        }
+            while (rs.next()) {
+                String desc = rs.getString("Description");
+                String gorsel = rs.getString("ImagePath");
+                String malzemeler = rs.getString("Malzemeler"); // Örn: Domates:1:0.0,Ekstra Kaşar:0:15.0
+                
+                sb.append("|").append(rs.getString("ProductName"))
+                  .append(";").append(rs.getDouble("Price"))
+                  .append(";").append((desc == null || desc.isEmpty()) ? "Açıklama Yok" : desc)
+                  .append(";").append(rs.getInt("Stock"))
+                  .append(";").append(gorsel == null ? "gorsel_yok.png" : gorsel)
+                  .append(";").append(malzemeler == null ? "" : malzemeler);
+            }
+            return sb.toString();
+        } catch (Exception e) { return "HATA|Ürünler yüklenemedi: " + e.getMessage(); }
     }
+
+    // ==========================================
+    // 5. KASA VE GÜN SONU İŞLEMLERİ
+    // ==========================================
+    public static String kasaKapat(String adminIsmi) {
+        try (Connection conn = DriverManager.getConnection(URL)) {
+            String aktifSorgu = "SELECT COUNT(*) FROM Siparisler WHERE Status NOT IN ('TESLIM_EDILDI', 'IPTAL', 'KASA_KAPATILDI')";
+            try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(aktifSorgu)) {
+                if (rs.next() && rs.getInt(1) > 0) return "HATA|İçeride aktif sipariş var. Kasa kapatılamaz!";
+            }
+
+            StringBuilder stokHatalari = new StringBuilder();
+            try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery("SELECT ProductName, Stock FROM Urunler WHERE Stock < 0")) {
+                while (rs.next()) stokHatalari.append(rs.getString("ProductName")).append("(").append(rs.getInt("Stock")).append("), ");
+            }
+
+            double toplamCiro = 0;
+            try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery("SELECT SUM(TotalPrice) FROM Siparisler WHERE Status = 'TESLIM_EDILDI'")) {
+                if (rs.next()) toplamCiro = rs.getDouble(1);
+            }
+
+            try (PreparedStatement pstmt = conn.prepareStatement("INSERT INTO Gunluk_Raporlar (ToplamCiro, StokHatalari, KapatanAdmin) VALUES (?, ?, ?)")) {
+                pstmt.setDouble(1, toplamCiro);
+                pstmt.setString(2, stokHatalari.length() == 0 ? "Hata Yok" : stokHatalari.toString());
+                pstmt.setString(3, adminIsmi);
+                pstmt.executeUpdate();
+            }
+            conn.createStatement().execute("UPDATE Siparisler SET Status = 'KASA_KAPATILDI' WHERE Status = 'TESLIM_EDILDI'");
+
+            return "BAŞARILI|Gün sonu alındı. Ciro: " + toplamCiro + " TL.";
+        } catch (Exception e) { return "HATA|Kasa kapatılamadı: " + e.getMessage(); }
+    }
+
+    // --- ESKİ SİSTEM: İSİMLE BASİT ÜRÜN EKLEME (Geriye Dönük Uyumluluk İçin) ---
     public static String urunEkleIsimle(String katAdi, String urunAdi, String aciklama, double fiyat, int stok, double kdv) {
         String idSorgu = "SELECT CategoryID FROM Kategoriler WHERE CategoryName = ?";
         String urunSql = "INSERT INTO Urunler (CategoryID, ProductName, Description, Price, Stock, KdvRate) VALUES (?, ?, ?, ?, ?, ?)";
         
-        // Her iki işlemi de TEK bir connection ve TRY bloğu içinde yapıyoruz
         try (Connection conn = DriverManager.getConnection(URL)) {
             int katId = -1;
             
-            // 1. Önce ID'yi bul
+            // 1. Kategorinin ID'sini bul
             try (PreparedStatement pstmtId = conn.prepareStatement(idSorgu)) {
                 pstmtId.setString(1, katAdi);
                 ResultSet rs = pstmtId.executeQuery();
@@ -241,10 +338,10 @@ public class DatabaseManager {
                     katId = rs.getInt("CategoryID");
                 }
             }
-
+            
             if (katId == -1) return "HATA|Kategori bulunamadı!";
 
-            // 2. Şimdi Ürünü Ekle (Aynı bağlantı üzerinden)
+            // 2. Ürünü Ekle
             try (PreparedStatement pstmtUrun = conn.prepareStatement(urunSql)) {
                 pstmtUrun.setInt(1, katId);
                 pstmtUrun.setString(2, urunAdi);
@@ -253,74 +350,193 @@ public class DatabaseManager {
                 pstmtUrun.setInt(5, stok);
                 pstmtUrun.setDouble(6, kdv);
                 pstmtUrun.executeUpdate();
-                return "BAŞARILI|Ürün başarıyla eklendi: " + urunAdi;
+                return "BAŞARILI|Ürün eklendi: " + urunAdi;
             }
-            
-        } catch (Exception e) {
-            return "HATA|Veritabanı kilitlendi veya hata oluştu: " + e.getMessage();
+        } catch (Exception e) { 
+            return "HATA|Veritabanı hatası: " + e.getMessage(); 
         }
+    }
+    // --- ÜRÜN SİLME METODU ---
+    public static String urunSil(String urunAdi) {
+        String sqlGetId = "SELECT ProductID FROM Urunler WHERE ProductName = ?";
+        String sqlDeleteUrun = "DELETE FROM Urunler WHERE ProductID = ?";
+        // Not: Urun_Malzemeleri tablosunda ON DELETE CASCADE olduğu için, 
+        // ana ürün silinince ona ait malzemeler otomatik silinecektir.
+
+        try (Connection conn = DriverManager.getConnection(URL)) {
+            int productId = -1;
+            try (PreparedStatement pstmtId = conn.prepareStatement(sqlGetId)) {
+                pstmtId.setString(1, urunAdi);
+                ResultSet rs = pstmtId.executeQuery();
+                if (rs.next()) productId = rs.getInt("ProductID");
+            }
+            if (productId == -1) return "HATA|Silinecek ürün bulunamadı!";
+            
+            try (PreparedStatement pstmt = conn.prepareStatement(sqlDeleteUrun)) {
+                pstmt.setInt(1, productId);
+                pstmt.executeUpdate();
+                return "BAŞARILI|Ürün başarıyla silindi: " + urunAdi;
+            }
+        } catch (Exception e) { return "HATA|Ürün silinirken hata oluştu: " + e.getMessage(); }
     }
 
-    public static String kategorileriGetir() {
-        StringBuilder sb = new StringBuilder("KAT_LISTESI");
-        String sql = "SELECT CategoryName FROM Kategoriler";
-        try (Connection conn = DriverManager.getConnection(URL);
-            Statement stmt = conn.createStatement();
-            ResultSet rs = stmt.executeQuery(sql)) {
-            while (rs.next()) {
-                sb.append("|").append(rs.getString("CategoryName"));
-            }
-            return sb.toString();
-        } catch (Exception e) {
-            return "HATA|Kategoriler çekilemedi: " + e.getMessage();
-        }
-    }
-    public static String urunleriGetir(String katAdi) {
-        StringBuilder sb = new StringBuilder("URUN_LISTESI");
-        String sql = "SELECT ProductName, Price, Stock FROM Urunler " +
-                    "JOIN Kategoriler ON Urunler.CategoryID = Kategoriler.CategoryID " +
-                    "WHERE Kategoriler.CategoryName = ?";
-        
-        try (Connection conn = DriverManager.getConnection(URL);
-            PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            
-            pstmt.setString(1, katAdi);
-            ResultSet rs = pstmt.executeQuery();
-            
-            while (rs.next()) {
-                sb.append("|").append(rs.getString("ProductName"))
-                .append(";").append(rs.getDouble("Price"))
-                .append(";").append(rs.getInt("Stock"));
-            }
-            return sb.toString();
-        } catch (Exception e) {
-            return "HATA|Ürünler çekilemedi: " + e.getMessage();
-        }
+    // --- ÜRÜN VE İÇERİK GÜNCELLEME METODU ---
+    public static String urunGuncelle(String eskiAd, String katAdi, String yeniAd, double fiyat, String aciklama, String gorsel, String malzemelerStr) {
+        String sqlGetId = "SELECT ProductID FROM Urunler WHERE ProductName = ?";
+        String sqlGetKatId = "SELECT CategoryID FROM Kategoriler WHERE CategoryName = ?";
+        String sqlUpdateUrun = "UPDATE Urunler SET CategoryID = ?, ProductName = ?, Price = ?, Description = ?, ImagePath = ? WHERE ProductID = ?";
+        String sqlDeleteMalzemeler = "DELETE FROM Urun_Malzemeleri WHERE ProductID = ?";
+        String sqlInsertMalzeme = "INSERT INTO Urun_Malzemeleri (ProductID, MalzemeAdi, VarsayilanVarMi, EkstraUcret) VALUES (?, ?, ?, ?)";
 
-    }
-    public static String urunleriDetayliGetir(String katAdi) {
-        StringBuilder sb = new StringBuilder("URUN_LISTESI");
-        // Görseldeki sütun isimlerine (ProductName, Price, Stock, Description) göre sorgu:
-        String sql = "SELECT u.ProductName, u.Price, u.Stock, u.Description " +
-                    "FROM Urunler u " +
-                    "JOIN Kategoriler k ON u.CategoryID = k.CategoryID " +
-                    "WHERE k.CategoryName = ?";
-        
-        try (Connection conn = DriverManager.getConnection(URL);
-            PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            
-            pstmt.setString(1, katAdi);
-            ResultSet rs = pstmt.executeQuery();
-            
-            while (rs.next()) {
-                sb.append("|").append(rs.getString("ProductName"))
-                .append(";").append(rs.getDouble("Price"))
-                .append(";").append(rs.getString("Description")) // Görseldeki Description'ı çekiyoruz
-                .append(";").append(rs.getInt("Stock"));
+        try (Connection conn = DriverManager.getConnection(URL)) {
+            int productId = -1;
+            int katId = -1;
+
+            // 1. Ürün ID ve Kategori ID'yi Bul
+            try (PreparedStatement pId = conn.prepareStatement(sqlGetId)) {
+                pId.setString(1, eskiAd);
+                ResultSet rs = pId.executeQuery();
+                if(rs.next()) productId = rs.getInt("ProductID");
             }
-            return sb.toString();
-        } catch (Exception e) {
-            return "HATA|Ürünler yüklenemedi: " + e.getMessage();
+            if(productId == -1) return "HATA|Güncellenecek ürün bulunamadı!";
+
+            try (PreparedStatement pKat = conn.prepareStatement(sqlGetKatId)) {
+                pKat.setString(1, katAdi);
+                ResultSet rs = pKat.executeQuery();
+                if(rs.next()) katId = rs.getInt("CategoryID");
+            }
+
+            // 2. Ürünün Ana Bilgilerini Güncelle
+            try (PreparedStatement pUpd = conn.prepareStatement(sqlUpdateUrun)) {
+                pUpd.setInt(1, katId); pUpd.setString(2, yeniAd); pUpd.setDouble(3, fiyat);
+                pUpd.setString(4, aciklama); pUpd.setString(5, gorsel); pUpd.setInt(6, productId);
+                pUpd.executeUpdate();
+            }
+
+            // 3. Ürünün Eski Malzemelerini Silip, Tablodaki Yeni Halini Ekle
+            try (PreparedStatement pDelMat = conn.prepareStatement(sqlDeleteMalzemeler)) {
+                pDelMat.setInt(1, productId);
+                pDelMat.executeUpdate();
+            }
+
+            if (malzemelerStr != null && !malzemelerStr.isEmpty() && !malzemelerStr.equals("null")) {
+                try (PreparedStatement pMat = conn.prepareStatement(sqlInsertMalzeme)) {
+                    String[] malzemeler = malzemelerStr.split(",");
+                    for (String m : malzemeler) {
+                        String[] mDetay = m.split(":");
+                        if (mDetay.length == 3) {
+                            pMat.setInt(1, productId);
+                            pMat.setString(2, mDetay[0].trim());
+                            pMat.setInt(3, Integer.parseInt(mDetay[1].trim()));
+                            pMat.setDouble(4, Double.parseDouble(mDetay[2].trim()));
+                            pMat.addBatch();
+                        }
+                    }
+                    pMat.executeBatch();
+                }
+            }
+            return "BAŞARILI|Ürün ve içerikler başarıyla güncellendi!";
+        } catch (Exception e) { return "HATA|Güncelleme hatası: " + e.getMessage(); }
+    }
+    // --- KATEGORİ SİLME METODU (Güvenlik Kontrollü) ---
+    public static String kategoriSil(String categoryName) {
+        // Kural: İçinde ürün olan kategori silinemez!
+        String checkSql = "SELECT COUNT(*) FROM Urunler u JOIN Kategoriler k ON u.CategoryID = k.CategoryID WHERE k.CategoryName = ?";
+        String delSql = "DELETE FROM Kategoriler WHERE CategoryName = ?";
+        
+        try (Connection conn = DriverManager.getConnection(URL)) {
+            // Önce ürün var mı diye kontrol et
+            try (PreparedStatement pCheck = conn.prepareStatement(checkSql)) {
+                pCheck.setString(1, categoryName);
+                ResultSet rs = pCheck.executeQuery();
+                if (rs.next() && rs.getInt(1) > 0) {
+                    return "HATA|Silmek istediğiniz kategoride " + rs.getInt(1) + " adet ürün bulunuyor! Önce ürünleri silin.";
+                }
+            }
+            // Ürün yoksa güvenle sil
+            try (PreparedStatement pDel = conn.prepareStatement(delSql)) {
+                pDel.setString(1, categoryName);
+                pDel.executeUpdate();
+                return "BAŞARILI|Kategori başarıyla silindi.";
+            }
+        } catch (Exception e) { return "HATA|Kategori silinemedi: " + e.getMessage(); }
+    }
+    // --- KULLANICI SİLME METODU ---
+    public static String kullaniciSil(String userName) {
+        if (userName.equalsIgnoreCase("admin")) {
+            return "HATA|Ana yönetici hesabı (admin) silinemez!";
         }
+        String sql = "DELETE FROM Kullanicilar WHERE UserName = ?";
+        try (Connection conn = DriverManager.getConnection(URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, userName);
+            int affected = pstmt.executeUpdate();
+            if (affected > 0) return "BAŞARILI|Kullanıcı başarıyla silindi: " + userName;
+            return "HATA|Silinecek kullanıcı bulunamadı.";
+        } catch (Exception e) { return "HATA|Kullanıcı silinemedi: " + e.getMessage(); }
+    }
+
+    // --- KULLANICI GÜNCELLEME METODU ---
+    public static String kullaniciGuncelle(String eskiKullaniciAdi, String userName, String pass, String ad, String soyad, String rol, String email, String tel, String adres) {
+        if (eskiKullaniciAdi.equalsIgnoreCase("admin") && !userName.equalsIgnoreCase("admin")) {
+            return "HATA|'admin' hesabının kullanıcı adı değiştirilemez!";
+        }
+        String sql = "UPDATE Kullanicilar SET UserName=?, Password=?, FirstName=?, LastName=?, Role=?, Email=?, Phone=?, Address=? WHERE UserName=?";
+        try (Connection conn = DriverManager.getConnection(URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, userName); pstmt.setString(2, pass);
+            pstmt.setString(3, ad); pstmt.setString(4, soyad);
+            pstmt.setString(5, rol); pstmt.setString(6, email);
+            pstmt.setString(7, tel); pstmt.setString(8, adres);
+            pstmt.setString(9, eskiKullaniciAdi);
+            pstmt.executeUpdate();
+            return "BAŞARILI|Kullanıcı bilgileri güncellendi!";
+        } catch (Exception e) { return "HATA|Güncelleme hatası: " + e.getMessage(); }
+    }
+    // ==========================================
+    // MUTFAK, KASA VE VESTİYER İŞLEMLERİ
+    // ==========================================
+
+    // Sipariş Durumu Güncelleme (Mutfak ve Kasa İçin)
+    public static String siparisDurumuGuncelle(int orderId, String yeniDurum) {
+        String sql = "UPDATE Siparisler SET Status = ? WHERE OrderID = ?";
+        try (Connection conn = DriverManager.getConnection(URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, yeniDurum);
+            pstmt.setInt(2, orderId);
+            int affected = pstmt.executeUpdate();
+            
+            // Durum değiştiğinde Log tablosuna da yazalım
+            if (affected > 0) {
+                try(PreparedStatement logStmt = conn.prepareStatement("INSERT INTO Siparis_Zaman_Loglari (OrderID, Status) VALUES (?, ?)")) {
+                    logStmt.setInt(1, orderId); logStmt.setString(2, yeniDurum); logStmt.executeUpdate();
+                }
+                return "BAŞARILI|Sipariş durumu '" + yeniDurum + "' olarak güncellendi.";
+            }
+            return "HATA|Sipariş bulunamadı.";
+        } catch (Exception e) { return "HATA|Durum güncellenemedi: " + e.getMessage(); }
+    }
+
+    // Vestiyere Eşya Ekleme
+    public static String vestiyerEkle(String masaNo, String askiNo) {
+        String sql = "INSERT INTO Vestiyer_Kayitlari (MasaNo, AskiNumarasi) VALUES (?, ?)";
+        try (Connection conn = DriverManager.getConnection(URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, masaNo);
+            pstmt.setString(2, askiNo);
+            pstmt.executeUpdate();
+            return "BAŞARILI|Eşya vestiyere eklendi. Askı No: " + askiNo;
+        } catch (Exception e) { return "HATA|Vestiyer kaydı yapılamadı: " + e.getMessage(); }
+    }
+
+    // Vestiyerdeki Eşyayı Teslim Etme
+    public static String vestiyerTeslimEt(int islemId) {
+        String sql = "UPDATE Vestiyer_Kayitlari SET Durum = 'IADE_EDILDI' WHERE IslemID = ?";
+        try (Connection conn = DriverManager.getConnection(URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, islemId);
+            pstmt.executeUpdate();
+            return "BAŞARILI|Eşya müşteriye teslim edildi.";
+        } catch (Exception e) { return "HATA|İşlem başarısız: " + e.getMessage(); }
     }
 }

@@ -10,7 +10,7 @@ import java.io.PrintWriter;
 import java.net.Socket;
 
 public class LoginEkrani extends JFrame {
-    private String secilenRol; // "YETKİLİ" veya "PERSONEL"
+    private String secilenRol; 
     private JTextField txtKullaniciAdi;
     private JPasswordField txtSifre;
     private JLabel lblMesaj;
@@ -20,17 +20,15 @@ public class LoginEkrani extends JFrame {
 
         setTitle(rol + " Girişi");
         setSize(350, 250);
-        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE); // Sadece bu pencereyi kapat
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE); 
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
 
-        // Üst Başlık
         JLabel baslik = new JLabel(rol + " GİRİŞ PANELİ", SwingConstants.CENTER);
         baslik.setFont(new Font("Arial", Font.BOLD, 18));
         baslik.setBorder(BorderFactory.createEmptyBorder(10, 0, 10, 0));
         add(baslik, BorderLayout.NORTH);
 
-        // Orta Form Alanı (Kullanıcı Adı ve Şifre)
         JPanel formPanel = new JPanel(new GridLayout(3, 2, 5, 10));
         formPanel.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
 
@@ -42,15 +40,13 @@ public class LoginEkrani extends JFrame {
         txtSifre = new JPasswordField();
         formPanel.add(txtSifre);
 
-        // Hata veya başarı mesajlarını göstereceğimiz etiket
         lblMesaj = new JLabel("", SwingConstants.CENTER);
         lblMesaj.setForeground(Color.RED);
-        formPanel.add(new JLabel("")); // Boşluk tutucu
+        formPanel.add(new JLabel("")); 
         formPanel.add(lblMesaj);
 
         add(formPanel, BorderLayout.CENTER);
 
-        // Alt Buton Alanı
         JPanel butonPanel = new JPanel();
         JButton btnGirisYap = new JButton("Giriş Yap");
         btnGirisYap.setBackground(new Color(70, 130, 180));
@@ -58,19 +54,12 @@ public class LoginEkrani extends JFrame {
         btnGirisYap.setFont(new Font("Arial", Font.BOLD, 14));
         btnGirisYap.setFocusPainted(false);
         
-        // Giriş Yap butonuna tıklanınca çalışacak olay
-        btnGirisYap.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                sunucuyaGirisIstegiGonder();
-            }
-        });
+        btnGirisYap.addActionListener(e -> sunucuyaGirisIstegiGonder());
 
         butonPanel.add(btnGirisYap);
         add(butonPanel, BorderLayout.SOUTH);
     }
 
-    // Sunucuya bağlanıp LOGIN komutunu gönderen metot
     private void sunucuyaGirisIstegiGonder() {
         String kullaniciAdi = txtKullaniciAdi.getText().trim();
         String sifre = new String(txtSifre.getPassword()).trim();
@@ -83,52 +72,44 @@ public class LoginEkrani extends JFrame {
         lblMesaj.setText("Sunucuya bağlanılıyor...");
         lblMesaj.setForeground(Color.BLUE);
 
-        // Sunucuya Soket ile Bağlan (Yerel bilgisayar testleri için "localhost" veya "127.0.0.1")
         try (Socket socket = new Socket("localhost", 8080);
              PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
              BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
             
-            // Sunucudan gelen ilk karşılama mesajını oku ve geç
             in.readLine();
 
-            // Komutu sunucuya gönder: LOGIN|admin|admin123
-            String komut = "LOGIN|" + kullaniciAdi + "|" + sifre;
+            // Giriş komutunu gönder
+            String komut = "GIRIS|" + kullaniciAdi + "|" + sifre;
             out.println(komut);
 
-            // Sunucunun cevabını bekle
             String sunucuCevabi = in.readLine();
 
-            // Eğer sunucu "BAŞARILI" dediyse
             if (sunucuCevabi != null && sunucuCevabi.startsWith("BAŞARILI")) {
-                // Cevap formatı: BAŞARILI|Admin|Sistem Yöneticisi
                 String[] parcalar = sunucuCevabi.split("\\|");
                 String yetki = parcalar[1];
                 String adSoyad = parcalar[2];
 
-                // Yetkiye göre doğru paneli aç
-                if (yetki.equalsIgnoreCase("Admin")) {
-                    AdminPaneli adminPaneli = new AdminPaneli(adSoyad);
+                // YETKİ KONTROLÜ (Admin veya Staff ise Yönetim Paneline Al)
+                if (yetki.equalsIgnoreCase("Admin") || yetki.equalsIgnoreCase("Staff")) {
+                    AdminPaneli adminPaneli = new AdminPaneli(adSoyad, yetki); // Yetkiyi de gönderiyoruz!
                     adminPaneli.setVisible(true);
                 } else {
-                    // Personel paneli daha kodlanmadı, şimdilik uyarı veriyoruz
-                    JOptionPane.showMessageDialog(this, "Hoşgeldin " + adSoyad + "!\nPersonel paneli yapım aşamasında.", "Giriş Başarılı", JOptionPane.INFORMATION_MESSAGE);
+                    // Garson, Kasiyer vb. için (İleride sipariş ekranı açılacak)
+                    JOptionPane.showMessageDialog(this, "Hoşgeldin " + adSoyad + "!\nPersonel sipariş paneli yapım aşamasında.", "Giriş Başarılı", JOptionPane.INFORMATION_MESSAGE);
                 }
                 
-                this.dispose(); // Giriş ekranını tamamen kapat
+                this.dispose(); 
                 
             } else {
-                // Sunucu HATA döndüyse
                 lblMesaj.setText("Hatalı kullanıcı adı veya şifre!");
                 lblMesaj.setForeground(Color.RED);
             }
 
-            // İşimiz bitti, soket bağlantısını kapatması için çıkış komutu gönder
             out.println("exit");
 
         } catch (Exception ex) {
             lblMesaj.setText("Sunucuya bağlanılamadı!");
             lblMesaj.setForeground(Color.RED);
-            System.err.println("Bağlantı Hatası: " + ex.getMessage());
         }
     }
 }

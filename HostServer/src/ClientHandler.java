@@ -78,11 +78,20 @@ public class ClientHandler implements Runnable {
                 // 3. KATEGORİ İŞLEMLERİ
                 // ==========================================
                 case "KATEGORI_EKLE":
+                    // Format: KATEGORI_EKLE|KategoriAdı|Aciklama|Gorsel
                     if (parcalar.length >= 2) {
                         String aciklama = parcalar.length > 2 ? parcalar[2] : "Açıklama Yok";
-                        return DatabaseManager.kategoriEkle(parcalar[1], aciklama);
+                        String gorsel = parcalar.length > 3 ? parcalar[3] : "gorsel_yok.png";
+                        return DatabaseManager.kategoriEkle(parcalar[1], aciklama, gorsel);
                     }
                     return "HATA|Eksik parametre!";
+
+                case "KATEGORI_GUNCELLE":
+                    // Format: KATEGORI_GUNCELLE|EskiAd|YeniAd|Gorsel
+                    if (parcalar.length >= 4) {
+                        return DatabaseManager.kategoriGuncelle(parcalar[1], parcalar[2], parcalar[3]);
+                    }
+                    return "HATA|Kategori güncelleme parametreleri eksik!";
 
                 case "KAT_LISTESI_GETIR":
                     return DatabaseManager.kategorileriGetir();
@@ -104,6 +113,24 @@ public class ClientHandler implements Runnable {
                     }
                     return "HATA|Eksik parametre!";
 
+                case "KATEGORI_SIL":
+                    if (parcalar.length >= 2) {
+                        return DatabaseManager.kategoriSil(parcalar[1]);
+                    }
+                    return "HATA|Kategori silme parametreleri eksik!";
+                case "URUN_SIL":
+                    if (parcalar.length >= 2) {
+                        return DatabaseManager.urunSil(parcalar[1]);
+                    }
+                    return "HATA|Eksik parametre!";
+                    
+                case "URUN_GUNCELLE_DETAYLI":
+                    // Format: URUN_GUNCELLE_DETAYLI|EskiUrunAdi|KatAdi|YeniUrunAdi|Fiyat|Aciklama|Gorsel|Malzemeler
+                    if (parcalar.length >= 8) {
+                        double f = Double.parseDouble(parcalar[4]);
+                        return DatabaseManager.urunGuncelle(parcalar[1], parcalar[2], parcalar[3], f, parcalar[5], parcalar[6], parcalar[7]);
+                    }
+                    return "HATA|Güncelleme için eksik parametre!";
                 // ==========================================
                 // 5. YENİ GELİŞMİŞ ÜRÜN İŞLEMLERİ (İçerik ve Görsel)
                 // ==========================================
@@ -120,7 +147,35 @@ public class ClientHandler implements Runnable {
                         return DatabaseManager.urunleriDetayliGetir(parcalar[1]);
                     }
                     return "HATA|Eksik parametre!";
+                case "KULLANICI_SIL":
+                    if (parcalar.length >= 2) return DatabaseManager.kullaniciSil(parcalar[1]);
+                    return "HATA|Eksik parametre!";
+                case "SIPARIS_DURUM_GUNCELLE":
+                    // Format: SIPARIS_DURUM_GUNCELLE|OrderID|YENI_DURUM (Örn: HAZIRLANIYOR, IPTAL, ODENDI)
+                    if (parcalar.length >= 3) {
+                        return DatabaseManager.siparisDurumuGuncelle(Integer.parseInt(parcalar[1]), parcalar[2]);
+                    }
+                    return "HATA|Eksik parametre!";
 
+                case "VESTIYER_EKLE":
+                    // Format: VESTIYER_EKLE|MasaNo|AskiNo
+                    if (parcalar.length >= 3) {
+                        return DatabaseManager.vestiyerEkle(parcalar[1], parcalar[2]);
+                    }
+                    return "HATA|Eksik parametre!";
+
+                case "VESTIYER_TESLIM_ET":
+                    // Format: VESTIYER_TESLIM_ET|IslemID
+                    if (parcalar.length >= 2) {
+                        return DatabaseManager.vestiyerTeslimEt(Integer.parseInt(parcalar[1]));
+                    }
+                    return "HATA|Eksik parametre!";
+                case "KULLANICI_GUNCELLE":
+                    // Format: KULLANICI_GUNCELLE|EskiKAdi|YeniKAdi|Sifre|Ad|Soyad|Rol|Email|Tel|Adres
+                    if (parcalar.length >= 10) {
+                        return DatabaseManager.kullaniciGuncelle(parcalar[1], parcalar[2], parcalar[3], parcalar[4], parcalar[5], parcalar[6], parcalar[7], parcalar[8], parcalar[9]);
+                    }
+                    return "HATA|Eksik parametre!";
                 // ==========================================
                 // BİLİNMEYEN KOMUT
                 // ==========================================
