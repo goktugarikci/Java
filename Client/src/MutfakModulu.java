@@ -1,4 +1,3 @@
-package src;
 
 import javax.swing.*;
 import java.awt.*;
@@ -128,6 +127,8 @@ public class MutfakModulu extends JPanel {
 
     private String idGetir(String htmlData) {
         int bas = htmlData.indexOf("");
+        int son = htmlData.indexOf("", bas + 1);
+        if (son == -1) son = htmlData.length();
         return htmlData.substring(bas, son);
     }
 
