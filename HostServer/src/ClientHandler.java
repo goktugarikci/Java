@@ -156,7 +156,17 @@ public class ClientHandler implements Runnable {
                         return DatabaseManager.siparisDurumuGuncelle(Integer.parseInt(parcalar[1]), parcalar[2]);
                     }
                     return "HATA|Eksik parametre!";
-
+                case "MASA_EKLE":
+                    if (parcalar.length >= 2) return DatabaseManager.masaEkle(parcalar[1]);
+                    return "HATA|Eksik parametre!";
+                case "MASALARI_GETIR":
+                    return DatabaseManager.masalariGetir();
+                case "MASA_GUNCELLE":
+                    if (parcalar.length >= 3) return DatabaseManager.masaGuncelle(parcalar[1], parcalar[2]);
+                    return "HATA|Eksik parametre!";
+                case "MASA_SIL":
+                    if (parcalar.length >= 2) return DatabaseManager.masaSil(parcalar[1]);
+                    return "HATA|Eksik parametre!";
                 case "VESTIYER_EKLE":
                     // Format: VESTIYER_EKLE|MasaNo|AskiNo
                     if (parcalar.length >= 3) {

@@ -89,13 +89,14 @@ public class LoginEkrani extends JFrame {
                 String yetki = parcalar[1];
                 String adSoyad = parcalar[2];
 
-                // YETKİ KONTROLÜ (Admin veya Staff ise Yönetim Paneline Al)
+                // YETKİ KONTROLÜ
                 if (yetki.equalsIgnoreCase("Admin") || yetki.equalsIgnoreCase("Staff")) {
-                    AdminPaneli adminPaneli = new AdminPaneli(adSoyad, yetki); // Yetkiyi de gönderiyoruz!
+                    AdminPaneli adminPaneli = new AdminPaneli(adSoyad, yetki); 
                     adminPaneli.setVisible(true);
                 } else {
-                    // Garson, Kasiyer vb. için (İleride sipariş ekranı açılacak)
-                    JOptionPane.showMessageDialog(this, "Hoşgeldin " + adSoyad + "!\nPersonel sipariş paneli yapım aşamasında.", "Giriş Başarılı", JOptionPane.INFORMATION_MESSAGE);
+                    // Garson, Kasiyer veya Mutfak için Personel Panelini Aç
+                    PersonelPaneli personelPaneli = new PersonelPaneli(adSoyad, yetki);
+                    personelPaneli.setVisible(true);
                 }
                 
                 this.dispose(); 

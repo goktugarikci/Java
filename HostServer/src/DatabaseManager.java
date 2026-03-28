@@ -78,6 +78,11 @@ public class DatabaseManager {
                     "AskiNumarasi TEXT NOT NULL, " +
                     "Durum TEXT DEFAULT 'TESLIM_ALINDI', " + // TESLIM_ALINDI veya IADE_EDILDI
                     "KayitZamani DATETIME DEFAULT CURRENT_TIMESTAMP);");
+            // YENİ: Masalar Tablosu
+            stmt.execute("CREATE TABLE IF NOT EXISTS Masalar (" +
+                    "MasaID INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                    "MasaAdi TEXT NOT NULL UNIQUE, " +
+                    "Durum TEXT DEFAULT 'BOS');"); // BOS, DOLU, REZERVE
             ilkAdminKoy(conn);
             System.out.println("Veritabanı Sistemi: Yeni Modifikatör (Malzeme) altyapısı aktif.");
             
@@ -538,5 +543,41 @@ public class DatabaseManager {
             pstmt.executeUpdate();
             return "BAŞARILI|Eşya müşteriye teslim edildi.";
         } catch (Exception e) { return "HATA|İşlem başarısız: " + e.getMessage(); }
+    }
+    // ==========================================
+    // MASA YÖNETİM İŞLEMLERİ
+    // ==========================================
+    public static String masaEkle(String masaAdi) {
+        String sql = "INSERT INTO Masalar (MasaAdi) VALUES (?)";
+        try (Connection conn = DriverManager.getConnection(URL); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, masaAdi); pstmt.executeUpdate(); return "BAŞARILI|Masa eklendi: " + masaAdi;
+        } catch (Exception e) { return "HATA|Masa eklenemedi (İsim kullanılıyor olabilir): " + e.getMessage(); }
+    }
+
+    public static String masalariGetir() {
+        StringBuilder sb = new StringBuilder("MASA_LISTESI");
+        String sql = "SELECT MasaAdi, Durum FROM Masalar";
+        try (Connection conn = DriverManager.getConnection(URL); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) { sb.append("|").append(rs.getString("MasaAdi")).append(";").append(rs.getString("Durum")); }
+            return sb.toString();
+        } catch (Exception e) { return "HATA|Masalar çekilemedi: " + e.getMessage(); }
+    }
+
+    public static String masaGuncelle(String eskiAd, String yeniAd) {
+        String sql = "UPDATE Masalar SET MasaAdi = ? WHERE MasaAdi = ?";
+        try (Connection conn = DriverManager.getConnection(URL); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, yeniAd); pstmt.setString(2, eskiAd);
+            int affected = pstmt.executeUpdate();
+            if (affected > 0) return "BAŞARILI|Masa adı güncellendi.";
+            return "HATA|Masa bulunamadı.";
+        } catch (Exception e) { return "HATA|Masa güncellenemedi: " + e.getMessage(); }
+    }
+
+    public static String masaSil(String masaAdi) {
+        // Not: Masada aktif sipariş varsa silinmesini engelleyen bir kontrol eklenebilir.
+        String sql = "DELETE FROM Masalar WHERE MasaAdi = ?";
+        try (Connection conn = DriverManager.getConnection(URL); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, masaAdi); pstmt.executeUpdate(); return "BAŞARILI|Masa silindi: " + masaAdi;
+        } catch (Exception e) { return "HATA|Masa silinemedi: " + e.getMessage(); }
     }
 }
