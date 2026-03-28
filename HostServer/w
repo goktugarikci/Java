@@ -1,0 +1,11 @@
+Kullanıcılar
+-UserName (Notnull, Unique)
+-Password (Notnull)
+-FirstName (Notnull)
+-LastName (Notnull)
+-Role (Notnull) (Admin, Staff, Personel)
+-Email (Notnull, Unique)
+-Phone (Notnull, Unique)
+-Address (Notnull)
+
+
