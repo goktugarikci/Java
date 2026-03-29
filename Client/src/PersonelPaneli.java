@@ -1,4 +1,3 @@
-
 import javax.swing.*;
 import java.awt.*;
 import java.io.BufferedReader;
@@ -12,7 +11,9 @@ public class PersonelPaneli extends JFrame {
     private String aktifPersonel;
     private String aktifRol;
 
-    // Ayrı Dosyalara Taşıdığımız Modüller
+    // ==========================================
+    // SİSTEM MODÜLLERİ (Parçalanmış Dosyalar)
+    // ==========================================
     private SiparisModulu siparisEkrani;
     private MutfakModulu mutfakEkrani;
     private KasaModulu kasaEkrani;
@@ -34,7 +35,9 @@ public class PersonelPaneli extends JFrame {
         cardLayout = new CardLayout(); 
         icerikPaneli = new JPanel(cardLayout);
 
-        // Modülleri Başlat ve Ekle
+        // ==========================================
+        // MODÜLLERİ BAŞLAT VE EKRANA EKLE
+        // ==========================================
         siparisEkrani = new SiparisModulu(this, aktifPersonel, aktifRol);
         mutfakEkrani = new MutfakModulu(this);
         kasaEkrani = new KasaModulu(this);
@@ -49,7 +52,9 @@ public class PersonelPaneli extends JFrame {
 
         add(icerikPaneli, BorderLayout.CENTER);
 
-        // Rol tabanlı başlangıç ekranı yönlendirmesi
+        // ==========================================
+        // ROL TABANLI BAŞLANGIÇ EKRANI YÖNLENDİRMESİ
+        // ==========================================
         if (aktifRol.equalsIgnoreCase("Mutfak")) {
             cardLayout.show(icerikPaneli, "Mutfak Panosu"); 
             mutfakEkrani.verileriYenile(); 
@@ -58,7 +63,7 @@ public class PersonelPaneli extends JFrame {
             kuryeEkrani.verileriYenile();
         } else {
             cardLayout.show(icerikPaneli, "Masalar ve Sipariş");
-            siparisEkrani.baslat();
+            siparisEkrani.baslat(); // Sipariş ekranı açıldığında masaları yükle
         }
     }
 
@@ -76,7 +81,10 @@ public class PersonelPaneli extends JFrame {
         btnCikis.setForeground(Color.WHITE); 
         btnCikis.setFocusPainted(false);
         
-        btnCikis.addActionListener(e -> { dispose(); new GirisSecimEkrani().setVisible(true); });
+        btnCikis.addActionListener(e -> { 
+            dispose(); 
+            new GirisSecimEkrani().setVisible(true); 
+        });
         
         ustBar.add(lblBaslik, BorderLayout.WEST); 
         ustBar.add(btnCikis, BorderLayout.EAST); 
@@ -93,11 +101,14 @@ public class PersonelPaneli extends JFrame {
         solMenu.add(new JLabel("<html><font color='white'><b>MODÜLLER</b></font></html>")); 
         solMenu.add(Box.createVerticalStrut(15));
         
+        // Yetkilere Göre Sol Menü Butonları
         if (aktifRol.equalsIgnoreCase("Kasiyer") || aktifRol.equalsIgnoreCase("Admin")) {
             solMenu.add(menuButonuOlustur("Masalar ve Sipariş", "Masalar ve Sipariş")); solMenu.add(Box.createVerticalStrut(10));
             solMenu.add(menuButonuOlustur("Kasa / Ödemeler", "Kasa Takip")); solMenu.add(Box.createVerticalStrut(10));
             solMenu.add(menuButonuOlustur("Rezervasyonlar", "Rezervasyonlar")); solMenu.add(Box.createVerticalStrut(10));
-            if (aktifRol.equalsIgnoreCase("Admin")) solMenu.add(menuButonuOlustur("🛵 Kurye Deneme", "Kurye Paneli"));
+            if (aktifRol.equalsIgnoreCase("Admin")) {
+                solMenu.add(menuButonuOlustur("🛵 Kurye Deneme", "Kurye Paneli"));
+            }
         } else if (aktifRol.equalsIgnoreCase("Garson")) {
             solMenu.add(menuButonuOlustur("Masalar ve Sipariş", "Masalar ve Sipariş")); solMenu.add(Box.createVerticalStrut(10));
             solMenu.add(menuButonuOlustur("Rezervasyonlar", "Rezervasyonlar")); solMenu.add(Box.createVerticalStrut(10));
@@ -108,6 +119,7 @@ public class PersonelPaneli extends JFrame {
         if (aktifRol.equalsIgnoreCase("Mutfak") || aktifRol.equalsIgnoreCase("Admin")) {
             solMenu.add(menuButonuOlustur("Mutfak Panosu", "Mutfak Panosu"));
         }
+        
         add(solMenu, BorderLayout.WEST);
     }
 
@@ -121,6 +133,7 @@ public class PersonelPaneli extends JFrame {
         
         btn.addActionListener(e -> {
             cardLayout.show(icerikPaneli, cardName);
+            // Sekmeye tıklandığında ilgili modülün verilerini yenile
             if(cardName.equals("Kasa Takip")) kasaEkrani.verileriYenile(); 
             else if (cardName.equals("Mutfak Panosu")) mutfakEkrani.verileriYenile(); 
             else if (cardName.equals("Rezervasyonlar")) rezervasyonEkrani.verileriYenile(); 
@@ -129,19 +142,32 @@ public class PersonelPaneli extends JFrame {
         return btn;
     }
 
+    // ==========================================
+    // KÖPRÜ METOTLARI (Modüller Arası İletişim)
+    // ==========================================
+    
+    // Sipariş modülü kasayı güncellemek istediğinde kullanılır
     public void kasaGuncelle() {
         if(kasaEkrani != null) kasaEkrani.verileriYenile();
     }
 
-    public String sunucuyaKomutGonderVeCevapAl(String komut) {
-        try (Socket s = new Socket("localhost", 8080); PrintWriter out = new PrintWriter(s.getOutputStream(), true); BufferedReader in = new BufferedReader(new InputStreamReader(s.getInputStream()))) {
-            in.readLine(); out.println(komut); return in.readLine();
-        } catch (Exception e) { return null; }
-    }
     // Kasa modülü ödeme aldığında Sipariş Modülündeki masayı sıfırlar
     public void masayiSifirla(String masaAdi) {
         if (siparisEkrani != null) {
             siparisEkrani.masayiSifirla(masaAdi);
+        }
+    }
+
+    // Tüm modüllerin ortak kullandığı Sunucu İstek Metodu
+    public String sunucuyaKomutGonderVeCevapAl(String komut) {
+        try (Socket s = new Socket("localhost", 8080); 
+             PrintWriter out = new PrintWriter(s.getOutputStream(), true); 
+             BufferedReader in = new BufferedReader(new InputStreamReader(s.getInputStream()))) {
+            in.readLine(); // Sunucudan gelen "Giriş başarılı" vb. ilk mesajı atla
+            out.println(komut); 
+            return in.readLine();
+        } catch (Exception e) { 
+            return null; 
         }
     }
 }

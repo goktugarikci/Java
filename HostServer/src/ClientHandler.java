@@ -225,6 +225,7 @@ public class ClientHandler implements Runnable {
                 case "KURYE_SIPARISLERI_GETIR":
                     if (parcalar.length >= 2) return DatabaseManager.kuryeSiparisleriGetir(parcalar[1]);
                     return "HATA|Eksik parametre!";
+                
                 // ==========================================
                 // BİLİNMEYEN KOMUT
                 // ==========================================

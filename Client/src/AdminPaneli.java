@@ -1,5 +1,4 @@
 
-
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
@@ -19,6 +18,10 @@ public class AdminPaneli extends JFrame {
     private JLabel lblCiro, lblSiparisSayisi, lblAktifMasa, lblRezervasyon;
     private DefaultTableModel zRaporTableModel;
     private JTable zRaporTablo;
+    
+    // Alt Modüller
+    private JPanel personelYonetimEkrani;
+    private UrunYonetimi urunYonetimEkrani; // YENİ
 
     public AdminPaneli(String adSoyad) {
         this.aktifPersonel = adSoyad;
@@ -34,13 +37,25 @@ public class AdminPaneli extends JFrame {
         cardLayout = new CardLayout();
         icerikPaneli = new JPanel(cardLayout);
 
+        // Modülleri Başlat
+        personelYonetimEkrani = personelYonetimiOlustur();
+        urunYonetimEkrani = new UrunYonetimi(this); // YENİ
+
+        // Sayfaları (Kartları) İçerik Paneline Ekle
         icerikPaneli.add(dashboardSayfasiOlustur(), "Dashboard");
         icerikPaneli.add(zRaporlariSayfasiOlustur(), "ZRaporlari");
-        icerikPaneli.add(bosSayfaOlustur("Ürün ve Menü Yönetimi Çok Yakında..."), "UrunYonetimi");
-        icerikPaneli.add(bosSayfaOlustur("Personel Hesapları Yönetimi Çok Yakında..."), "PersonelYonetimi");
+        icerikPaneli.add(personelYonetimEkrani, "PersonelYonetimi");
+        icerikPaneli.add(urunYonetimEkrani, "UrunYonetimi"); // YENİ EKLENDİ
 
         add(icerikPaneli, BorderLayout.CENTER);
         verileriGuncelle();
+    }
+
+    private JPanel personelYonetimiOlustur() {
+        // PersonelYonetimi sınıfı henüz tanımlanmadığı veya import edilemediği için 
+        // geçici bir placeholder panel döndürüyoruz.
+        // Eğer PersonelYonetimi.java dosyanız varsa, isminin ve paketinin doğruluğunu kontrol edin.
+        return bosSayfaOlustur("Personel Yönetimi Modülü Yüklenemedi");
     }
 
     private void ustBarAyarla() {
@@ -49,7 +64,8 @@ public class AdminPaneli extends JFrame {
         ustBar.setPreferredSize(new Dimension(0, 50));
         
         JLabel lblBaslik = new JLabel("  YÖNETİCİ (ADMİN) PANELİ | Hoş Geldiniz, " + aktifPersonel);
-        lblBaslik.setForeground(Color.WHITE); lblBaslik.setFont(new Font("Arial", Font.BOLD, 16));
+        lblBaslik.setForeground(Color.WHITE); 
+        lblBaslik.setFont(new Font("Arial", Font.BOLD, 16));
         
         JPanel pnlSagButonlar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 5)); pnlSagButonlar.setOpaque(false);
         JButton btnRestoranGecis = new JButton("Geri Dön: Restoran Ekranı ➔"); btnRestoranGecis.setBackground(new Color(39, 174, 96)); btnRestoranGecis.setForeground(Color.WHITE); btnRestoranGecis.setFocusPainted(false);
@@ -73,21 +89,21 @@ public class AdminPaneli extends JFrame {
 
         solMenu.add(menuButonuOlustur("📊 Günlük Özet (Dashboard)", "Dashboard")); solMenu.add(Box.createVerticalStrut(10));
         solMenu.add(menuButonuOlustur("📁 Geçmiş Z Raporları", "ZRaporlari")); solMenu.add(Box.createVerticalStrut(10));
-        solMenu.add(menuButonuOlustur("🍔 Ürün & Menü Yönetimi", "UrunYonetimi")); solMenu.add(Box.createVerticalStrut(10));
-        solMenu.add(menuButonuOlustur("👥 Personel Yönetimi", "PersonelYonetimi"));
+        solMenu.add(menuButonuOlustur("👥 Personel Yönetimi", "PersonelYonetimi")); solMenu.add(Box.createVerticalStrut(10));
+        solMenu.add(menuButonuOlustur("🍔 Ürün & Menü Yönetimi", "UrunYonetimi")); 
         
         add(solMenu, BorderLayout.WEST);
     }
 
     private JButton menuButonuOlustur(String text, String cardName) {
         JButton btn = new JButton("<html><center>" + text + "</center></html>");
-        btn.setMaximumSize(new Dimension(230, 55)); btn.setBackground(new Color(52, 73, 94)); 
-        btn.setForeground(Color.WHITE); btn.setFocusPainted(false); btn.setFont(new Font("Arial", Font.BOLD, 14));
+        btn.setMaximumSize(new Dimension(230, 55)); btn.setBackground(new Color(52, 73, 94)); btn.setForeground(Color.WHITE); btn.setFocusPainted(false); btn.setFont(new Font("Arial", Font.BOLD, 14));
         
         btn.addActionListener(e -> {
             cardLayout.show(icerikPaneli, cardName);
             if(cardName.equals("Dashboard")) verileriGuncelle();
             if(cardName.equals("ZRaporlari")) zRaporlariniYenile();
+            if(cardName.equals("UrunYonetimi")) urunYonetimEkrani.verileriYenile(); // YENİ EKLENDİ
         });
         return btn;
     }
@@ -101,15 +117,12 @@ public class AdminPaneli extends JFrame {
         JButton btnYenile = new JButton("🔄 Yenile"); btnYenile.setFont(new Font("Arial", Font.BOLD, 14)); btnYenile.setBackground(new Color(52, 152, 219)); btnYenile.setForeground(Color.WHITE);
         btnYenile.addActionListener(e -> verileriGuncelle());
         
-        // Z RAPORU KESME BUTONU
         JButton btnGunSonu = new JButton("🔒 GÜN SONU AL (Z Raporu)");
         btnGunSonu.setFont(new Font("Arial", Font.BOLD, 14)); btnGunSonu.setBackground(new Color(192, 57, 43)); btnGunSonu.setForeground(Color.WHITE);
         btnGunSonu.addActionListener(e -> {
-            int onay = JOptionPane.showConfirmDialog(this, "GÜN SONU DİKKAT!\n\nBu işlem bugünün tüm ödenmiş ve iptal edilmiş siparişlerini Z Raporu olarak arşivleyecektir.\nGeçmiş Kasa ekranındaki veriler sıfırlanacaktır.\n\nOnaylıyor musunuz?", "Z Raporu Onayı", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
-            if(onay == JOptionPane.YES_OPTION) {
+            if(JOptionPane.showConfirmDialog(this, "GÜN SONU DİKKAT!\n\nBu işlem bugünün tüm ödenmiş ve iptal edilmiş siparişlerini Z Raporu olarak arşivleyecektir.\nGeçmiş Kasa ekranındaki veriler sıfırlanacaktır.\n\nOnaylıyor musunuz?", "Z Raporu Onayı", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION) {
                 String tarih = new SimpleDateFormat("yyyy-MM-dd HH:mm").format(new Date());
-                String cvp = sunucuyaKomutGonderVeCevapAl("GUN_SONU_AL|" + tarih);
-                JOptionPane.showMessageDialog(this, cvp);
+                JOptionPane.showMessageDialog(this, sunucuyaKomutGonderVeCevapAl("GUN_SONU_AL|" + tarih));
                 verileriGuncelle();
             }
         });
@@ -129,59 +142,29 @@ public class AdminPaneli extends JFrame {
 
     private JPanel zRaporlariSayfasiOlustur() {
         JPanel pnlMain = new JPanel(new BorderLayout(15, 15)); pnlMain.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
-        
-        zRaporTableModel = new DefaultTableModel(new String[]{"Rapor Tarihi", "Toplam Ciro", "Toplam Fiş", "Masalar", "Paket Servis", "Eve Servis", "GIZLI_DETAY"}, 0) {
-            @Override public boolean isCellEditable(int row, int column) { return false; }
-        };
+        zRaporTableModel = new DefaultTableModel(new String[]{"Rapor Tarihi", "Toplam Ciro", "Toplam Fiş", "Masalar", "Paket Servis", "Eve Servis", "GIZLI_MASA", "GIZLI_STOK"}, 0) { @Override public boolean isCellEditable(int row, int column) { return false; } };
         zRaporTablo = new JTable(zRaporTableModel); zRaporTablo.setRowHeight(35); zRaporTablo.setFont(new Font("Arial", Font.PLAIN, 15));
         
-        // Gizli Masa Detay Kolonunu Sakla
         zRaporTablo.getColumnModel().getColumn(6).setMinWidth(0); zRaporTablo.getColumnModel().getColumn(6).setMaxWidth(0); zRaporTablo.getColumnModel().getColumn(6).setWidth(0);
+        zRaporTablo.getColumnModel().getColumn(7).setMinWidth(0); zRaporTablo.getColumnModel().getColumn(7).setMaxWidth(0); zRaporTablo.getColumnModel().getColumn(7).setWidth(0);
 
-        JScrollPane scrollPane = new JScrollPane(zRaporTablo);
-        scrollPane.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.GRAY), "Geçmiş Kasa (Z) Raporları Arşivi", 0, 0, new Font("Arial", Font.BOLD, 15)));
-        pnlMain.add(scrollPane, BorderLayout.CENTER);
+        JScrollPane scrollPane = new JScrollPane(zRaporTablo); scrollPane.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.GRAY), "Geçmiş Kasa (Z) Raporları Arşivi", 0, 0, new Font("Arial", Font.BOLD, 15))); pnlMain.add(scrollPane, BorderLayout.CENTER);
 
-        JButton btnDetay = new JButton("🔍 Seçili Raporun MASA Kullanım Detaylarını Gör");
-        btnDetay.setBackground(new Color(44, 62, 80)); btnDetay.setForeground(Color.WHITE); btnDetay.setFont(new Font("Arial", Font.BOLD, 16)); btnDetay.setPreferredSize(new Dimension(0, 50));
-        
+        JButton btnDetay = new JButton("🔍 Seçili Raporun DETAYLI (Stok & Masa) Analizini Gör"); btnDetay.setBackground(new Color(44, 62, 80)); btnDetay.setForeground(Color.WHITE); btnDetay.setFont(new Font("Arial", Font.BOLD, 16)); btnDetay.setPreferredSize(new Dimension(0, 50));
         btnDetay.addActionListener(e -> {
             int row = zRaporTablo.getSelectedRow();
             if (row != -1) {
-                String ciro = zRaporTableModel.getValueAt(row, 1).toString();
-                String tarih = zRaporTableModel.getValueAt(row, 0).toString();
-                String masaDetay = zRaporTableModel.getValueAt(row, 6).toString();
-                String stokDetay = zRaporTableModel.getValueAt(row, 7).toString(); // Yeni Stok Verisi
-                
-                StringBuilder mesaj = new StringBuilder("<html><div style='font-family:Arial; font-size:14px; width:400px;'><h2>" + tarih + " - Z Raporu Analizi</h2>");
-                mesaj.append("<b>Kapanış Cirosu: </b><font color='green' size='5'>").append(ciro).append("</font><br><hr>");
-                
-                mesaj.append("<h3>🍽️ Masa Kullanım Analizi</h3>");
-                for(String m : masaDetay.split(",")) {
-                    if(!m.trim().isEmpty()) {
-                        String[] md = m.split(":");
-                        if(md.length == 2) mesaj.append("► <b>").append(md[0]).append("</b> : ").append(md[1]).append(" defa sipariş aldı.<br>");
-                    }
-                }
-                
+                String tarih = zRaporTableModel.getValueAt(row, 0).toString(); String ciro = zRaporTableModel.getValueAt(row, 1).toString(); String masaDetay = zRaporTableModel.getValueAt(row, 6).toString(); String stokDetay = zRaporTableModel.getValueAt(row, 7).toString(); 
+                StringBuilder mesaj = new StringBuilder("<html><div style='font-family:Arial; font-size:14px; width:450px;'><h2>" + tarih + " - Z Raporu Analizi</h2><b>Kapanış Cirosu: </b><font color='green' size='5'>" + ciro + "</font><br><hr><h3>🍽️ Masa Kullanım Analizi</h3>");
+                for(String m : masaDetay.split(",")) { if(!m.trim().isEmpty()) { String[] md = m.split(":"); if(md.length == 2) mesaj.append("► <b>").append(md[0]).append("</b> : ").append(md[1]).append(" defa sipariş aldı.<br>"); } }
                 mesaj.append("<hr><h3>📦 Günlük Satış ve Stok Analizi</h3>");
-                if (stokDetay.equals("Satış Yok")) {
-                    mesaj.append("<i>Stok düşülecek ürün satışı bulunamadı.</i>");
-                } else {
-                    for(String s : stokDetay.split("\\|")) {
-                        if(!s.trim().isEmpty()) mesaj.append("► ").append(s).append("<br>");
-                    }
-                }
+                if (stokDetay.equals("Satış Yok") || stokDetay.isEmpty() || stokDetay.equals("null")) mesaj.append("<i>Stok düşülecek ürün satışı bulunamadı.</i>");
+                else for(String s : stokDetay.split("\\|")) { if(!s.trim().isEmpty()) mesaj.append("► ").append(s).append("<br>"); }
                 mesaj.append("</div></html>");
-                
                 JOptionPane.showMessageDialog(this, mesaj.toString(), "Z Raporu Detayı", JOptionPane.INFORMATION_MESSAGE);
-            } else {
-                JOptionPane.showMessageDialog(this, "Lütfen detayını görmek istediğiniz raporu tablodan seçin!");
-            }
+            } else JOptionPane.showMessageDialog(this, "Lütfen detayını görmek istediğiniz raporu tablodan seçin!");
         });
-        
-        pnlMain.add(btnDetay, BorderLayout.SOUTH);
-        return pnlMain;
+        pnlMain.add(btnDetay, BorderLayout.SOUTH); return pnlMain;
     }
 
     private void zRaporlariniYenile() {
@@ -194,7 +177,7 @@ public class AdminPaneli extends JFrame {
                     for (String r : raporlar) {
                         if (r.trim().isEmpty()) continue;
                         String[] d = r.split("~_~");
-                        if (d.length >= 7) zRaporTableModel.addRow(new Object[]{ d[0], d[1] + " TL", d[2], d[5], d[3], d[4], d[6] });
+                        if (d.length >= 8) zRaporTableModel.addRow(new Object[]{ d[0], d[1] + " TL", d[2], d[5], d[3], d[4], d[6], d[7] });
                     }
                 }
             });
@@ -202,41 +185,40 @@ public class AdminPaneli extends JFrame {
     }
 
     private JPanel bilgiKartiOlustur(String baslik, JLabel degerLabel, Color renk) {
-        JPanel kart = new JPanel(new BorderLayout()); kart.setBackground(Color.WHITE);
-        kart.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(renk, 3, true), BorderFactory.createEmptyBorder(20, 20, 20, 20)));
+        JPanel kart = new JPanel(new BorderLayout()); kart.setBackground(Color.WHITE); kart.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(renk, 3, true), BorderFactory.createEmptyBorder(20, 20, 20, 20)));
         JLabel lblBaslik = new JLabel(baslik, SwingConstants.CENTER); lblBaslik.setFont(new Font("Arial", Font.BOLD, 20)); lblBaslik.setForeground(Color.DARK_GRAY);
         degerLabel.setFont(new Font("Arial", Font.BOLD, 45)); degerLabel.setForeground(renk);
-        kart.add(lblBaslik, BorderLayout.NORTH); kart.add(degerLabel, BorderLayout.CENTER);
-        return kart;
+        kart.add(lblBaslik, BorderLayout.NORTH); kart.add(degerLabel, BorderLayout.CENTER); return kart;
     }
 
     private void verileriGuncelle() {
-        Thread t = new Thread(() -> {
+        new Thread(() -> {
             String bugun = new SimpleDateFormat("yyyy-MM-dd").format(new Date());
             double gunlukCiro = 0.0;
             int gunlukSiparis = 0;
             
-            // Veritabanındaki Aktif ODENDI fişlerinden anlık ciroyu hesapla
-            String ciroCvp = sunucuyaKomutGonderVeCevapAl("KASA_SIPARIS_GETIR");
-            if (ciroCvp != null && ciroCvp.startsWith("KASA_VERI|") && ciroCvp.length() > 10) {
-                String[] siparisler = ciroCvp.substring(10).split("\\|\\|\\|");
+            // DÜZELTME: Aktif siparişlere değil, Kasadaki "GEÇMİŞ (ARŞİV) / ÖDENMİŞ" tablosuna bakar.
+            String ciroCvp = sunucuyaKomutGonderVeCevapAl("KASA_GECMIS_GETIR");
+            if (ciroCvp != null && ciroCvp.startsWith("KASA_GECMIS_VERI|") && ciroCvp.length() > 17) {
+                String[] siparisler = ciroCvp.substring(17).split("\\|\\|\\|");
                 for (String s : siparisler) {
                     if (s.trim().isEmpty()) continue;
                     String[] d = s.split("~_~"); 
                     if (d.length >= 5 && d[3].equals("ODENDI")) {
                         gunlukSiparis++;
                         String html = d[4];
-                        try {
-                            int fBas = html.indexOf("<b>");
-                            int fSon = html.indexOf("</b>", fBas);
-                            if (fBas != -1 && fSon != -1) {
-                                String fiyatStr = html.substring(fBas + 3, fSon).replace(" TL", "").replace(",", ".").trim();
-                                gunlukCiro += Double.parseDouble(fiyatStr);
+                        int fBas = html.indexOf("<b>");
+                        if (fBas != -1) {
+                            int fEnd = html.indexOf("</b>", fBas);
+                            if (fEnd != -1) {
+                                try {
+                                    gunlukCiro += Double.parseDouble(html.substring(fBas + 3, fEnd).replace(" TL", "").replace(",", ".").trim());
+                                } catch (Exception ignored) {}
                             }
-                        } catch(Exception ignored){}
                         }
                     }
                 }
+            }
             
             final double fCiro = gunlukCiro;
             final int fSiparis = gunlukSiparis;
@@ -253,8 +235,7 @@ public class AdminPaneli extends JFrame {
                 int sayi = rezCvp.length() > 10 ? rezCvp.substring(10).split("\\|\\|\\|").length : 0;
                 SwingUtilities.invokeLater(() -> lblRezervasyon.setText(sayi + " Kayıt"));
             }
-        });
-        t.start();
+        }).start();
     }
 
     public String sunucuyaKomutGonderVeCevapAl(String komut) {

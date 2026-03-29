@@ -1,10 +1,10 @@
-
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.awt.event.*;
 
 public class KasaModulu extends JPanel {
-    private PersonelPaneli anaPanel;
+    private JFrame anaPanel;
     private DefaultTableModel aktifTableModel, gecmisTableModel;
     private JTable aktifTablo, gecmisTablo;
     private JEditorPane txtFisDetay; 
@@ -14,8 +14,8 @@ public class KasaModulu extends JPanel {
     private String seciliSiparisId = "";
     private String seciliTur = "";
 
-    public KasaModulu(PersonelPaneli anaPanel) {
-        this.anaPanel = anaPanel; 
+    public KasaModulu(JFrame anaPanel) {
+        this.anaPanel = anaPanel;
         setLayout(new BorderLayout(15, 15)); 
         setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
         
@@ -132,7 +132,7 @@ public class KasaModulu extends JPanel {
         btnYolaCikti.addActionListener(e -> {
             if(seciliSiparisId.isEmpty()) return;
             
-            String kuryelerCvp = anaPanel.sunucuyaKomutGonderVeCevapAl("KURYELERI_GETIR");
+            String kuryelerCvp = sunucuyaKomutGonderVeCevapAl("KURYELERI_GETIR");
             if(kuryelerCvp != null && kuryelerCvp.startsWith("KURYE_LISTESI|")) {
                 String[] split = kuryelerCvp.split("\\|");
                 if (split.length <= 1) { 
@@ -150,7 +150,7 @@ public class KasaModulu extends JPanel {
                 
                 if (JOptionPane.showConfirmDialog(this, panel, "Kurye Ata ve Gönder", JOptionPane.OK_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE) == JOptionPane.OK_OPTION) {
                     String secilen = (String) cbKuryeler.getSelectedItem();
-                    String cvp = anaPanel.sunucuyaKomutGonderVeCevapAl("KURYE_ATA|" + seciliSiparisId + "|" + secilen);
+                    String cvp = sunucuyaKomutGonderVeCevapAl("KURYE_ATA|" + seciliSiparisId + "|" + secilen);
                     JOptionPane.showMessageDialog(this, cvp); 
                     verileriYenile();
                 }
@@ -191,7 +191,7 @@ public class KasaModulu extends JPanel {
 
     public void verileriYenile() {
         new Thread(() -> {
-            String cevap = anaPanel.sunucuyaKomutGonderVeCevapAl("KASA_SIPARIS_GETIR");
+            String cevap = sunucuyaKomutGonderVeCevapAl("KASA_SIPARIS_GETIR");
             SwingUtilities.invokeLater(() -> {
                 aktifTableModel.setColumnCount(4); 
                 aktifTableModel.setRowCount(0); 
@@ -212,7 +212,7 @@ public class KasaModulu extends JPanel {
         }).start();
 
         new Thread(() -> {
-            String cevap = anaPanel.sunucuyaKomutGonderVeCevapAl("KASA_GECMIS_GETIR");
+            String cevap = sunucuyaKomutGonderVeCevapAl("KASA_GECMIS_GETIR");
             SwingUtilities.invokeLater(() -> {
                 gecmisTableModel.setColumnCount(4); 
                 gecmisTableModel.setRowCount(0); 
@@ -240,11 +240,11 @@ public class KasaModulu extends JPanel {
         if(seciliSiparisId.isEmpty()) return;
         
         if(JOptionPane.showConfirmDialog(this, "Bu siparişi iptal etmek istediğinize emin misiniz?", "İşlem Onayı", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) {
-            String cvp = anaPanel.sunucuyaKomutGonderVeCevapAl("SIPARIS_DURUM_GUNCELLE|" + seciliSiparisId + "|" + yeniDurum);
+            String cvp = sunucuyaKomutGonderVeCevapAl("SIPARIS_DURUM_GUNCELLE|" + seciliSiparisId + "|" + yeniDurum);
             JOptionPane.showMessageDialog(this, cvp);
             
             if ((yeniDurum.equals("IPTAL") || yeniDurum.equals("YOLA_CIKTI")) && !seciliTur.contains("Müşteri")) {
-                anaPanel.masayiSifirla(seciliTur);
+                masayiSifirla(seciliTur);
             }
             verileriYenile();
         }
@@ -254,13 +254,32 @@ public class KasaModulu extends JPanel {
         if(seciliSiparisId.isEmpty()) return;
         
         if (JOptionPane.showConfirmDialog(this, "Sipariş " + odemeTuru + " olarak kapatılacak. Onaylıyor musunuz?", "Ödeme Onayı", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) {
-            String cvp = anaPanel.sunucuyaKomutGonderVeCevapAl("SIPARIS_ODEME_AL|" + seciliSiparisId + "|" + odemeTuru);
+            String cvp = sunucuyaKomutGonderVeCevapAl("SIPARIS_ODEME_AL|" + seciliSiparisId + "|" + odemeTuru);
             JOptionPane.showMessageDialog(this, cvp);
             
             if (!seciliTur.contains("Müşteri")) {
-                anaPanel.masayiSifirla(seciliTur); 
+                masayiSifirla(seciliTur); 
             }
             verileriYenile();
+        }
+    }
+
+    private String sunucuyaKomutGonderVeCevapAl(String komut) {
+        if (anaPanel instanceof PersonelPaneli) {
+            return ((PersonelPaneli) anaPanel).sunucuyaKomutGonderVeCevapAl(komut);
+        } else if (anaPanel instanceof AdminPaneli) {
+            return ((AdminPaneli) anaPanel).sunucuyaKomutGonderVeCevapAl(komut);
+        }
+        return null;
+    }
+
+    private void masayiSifirla(String masaAdi) {
+        if (anaPanel instanceof PersonelPaneli) {
+            ((PersonelPaneli) anaPanel).masayiSifirla(masaAdi);
+        } else if (anaPanel instanceof AdminPaneli) {
+            // Admin panelinde masayiSifirla doğrudan yoksa, 
+            // SiparisModulu üzerinden veya sunucu komutuyla yapılabilir.
+            // Mevcut mimaride PersonelPaneli ana taşıyıcıdır.
         }
     }
 }

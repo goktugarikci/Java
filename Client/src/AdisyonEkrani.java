@@ -30,7 +30,7 @@ public class AdisyonEkrani extends JDialog {
         setLocationRelativeTo(anaPanel);
 
         // ==========================================
-        // ÖNCEKİ SİPARİŞLERİ (EK SİPARİŞ) YÜKLEME
+        // 1. ÖNCEKİ SİPARİŞLERİ (EK SİPARİŞSE) YÜKLEME
         // ==========================================
         gecerliOncekiTutar = 0.0; 
         String oncekiMusteriIsmi = ""; 
@@ -65,7 +65,7 @@ public class AdisyonEkrani extends JDialog {
         }
 
         // ==========================================
-        // ÜST BÖLÜM: MÜŞTERİ BİLGİ FORMU
+        // 2. ÜST BÖLÜM: MÜŞTERİ BİLGİ FORMU
         // ==========================================
         JPanel pnlMusteriBilgi = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 10)); 
         pnlMusteriBilgi.setBackground(new Color(44, 62, 80)); 
@@ -100,7 +100,7 @@ public class AdisyonEkrani extends JDialog {
         add(pnlMusteriBilgi, BorderLayout.NORTH);
 
         // ==========================================
-        // ORTA BÖLÜM: ÜRÜNLER VE SEPET (SPLIT PANE)
+        // 3. ORTA BÖLÜM: ÜRÜNLER VE SEPET (SPLIT PANE)
         // ==========================================
         JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT); 
         split.setDividerLocation(700);
@@ -166,6 +166,9 @@ public class AdisyonEkrani extends JDialog {
         sepetTablosu.getColumnModel().getColumn(3).setPreferredWidth(200); 
         pnlSepet.add(new JScrollPane(sepetTablosu), BorderLayout.CENTER);
 
+        // ==========================================
+        // 4. ALT BÖLÜM: TOPLAM VE GÖNDER BUTONU
+        // ==========================================
         JPanel pnlAlt = new JPanel(new BorderLayout()); 
         lblToplamTutar = new JLabel("Toplam: 0.0 TL"); 
         lblToplamTutar.setFont(new Font("Arial", Font.BOLD, 14)); 
@@ -209,7 +212,7 @@ public class AdisyonEkrani extends JDialog {
                    .append(alanKisiHTML).append("Müşteri: <b>").append(musteriAdi).append("</b><br><hr>"); 
             }
 
-            StringBuilder stokDusecekListe = new StringBuilder(); // Stok Düşme Motoru İçin
+            StringBuilder stokDusecekListe = new StringBuilder(); // Stok Düşme Motoru İçin Data Hazırlığı
 
             for (int i = 0; i < sepetTableModel.getRowCount(); i++) {
                 String urun = sepetTableModel.getValueAt(i, 0).toString(); 
@@ -230,15 +233,16 @@ public class AdisyonEkrani extends JDialog {
             }
             fis.append("</html>");
             
-            // Stok Listesini Sunucuya Gönderiyoruz
+            // Stok Listesini ve HTML'i Sunucuya Gönderiyoruz
             String gonderilecekStokDatasi = stokDusecekListe.length() > 0 ? stokDusecekListe.substring(0, stokDusecekListe.length() - 1) : "null";
             anaPanel.sunucuyaKomutGonderVeCevapAl("SIPARIS_OLUSTUR|" + baslikIsmi + "|" + musteriAdi + "|" + fis.toString() + "|" + gonderilecekStokDatasi);
             
             JOptionPane.showMessageDialog(this, "Sipariş mutfağa başarıyla iletildi!"); 
             dispose();
             
+            // Sipariş bitince arka plandaki masaları tazele
             if (siparisModulu != null) {
-                siparisModulu.baslat(); // Ekranı yenile
+                siparisModulu.baslat(); 
             }
         });
 
@@ -295,7 +299,9 @@ public class AdisyonEkrani extends JDialog {
         pnlAna.setLayout(new BoxLayout(pnlAna, BoxLayout.Y_AXIS)); 
         pnlAna.setBorder(BorderFactory.createEmptyBorder(10, 15, 10, 15));
         
-        // ADET SEÇİCİ (SPINNER)
+        // ==========================================
+        // ÜRÜN ADET SEÇİCİ (SPINNER)
+        // ==========================================
         JPanel pnlAdet = new JPanel(new FlowLayout(FlowLayout.LEFT)); 
         pnlAdet.setBackground(Color.WHITE); 
         pnlAdet.setBorder(BorderFactory.createLineBorder(Color.GRAY));
@@ -307,6 +313,9 @@ public class AdisyonEkrani extends JDialog {
         pnlAna.add(pnlAdet); 
         pnlAna.add(Box.createVerticalStrut(10));
 
+        // ==========================================
+        // MALZEMELER (ÇIKARILABİLİR / EKSTRALAR)
+        // ==========================================
         JPanel pnlCikarilabilir = new JPanel(new GridLayout(0, 1, 5, 5)); 
         pnlCikarilabilir.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.GRAY), "İçindekiler (Çıkarılacakların tikini kaldırın)"));
         
@@ -378,7 +387,7 @@ public class AdisyonEkrani extends JDialog {
             String sonNot = String.join(" | ", notListesi); 
             if(sonNot.isEmpty()) sonNot = "Standart";
             
-            // Fiyatı adet ile çarpıyoruz
+            // Seçilen adet ile birim fiyatı çarpıyoruz
             double sonFiyat = birimFiyat * secilenAdet;
             sepetTableModel.addRow(new Object[]{urunAd, secilenAdet, sonFiyat, sonNot}); 
             hesaplaToplam(); 
