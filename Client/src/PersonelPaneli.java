@@ -18,20 +18,18 @@ public class PersonelPaneli extends JFrame {
     private String aktifPersonel;
     private String aktifRol;
 
-    // Sipariş (Adisyon) Sepeti
     private DefaultTableModel sepetTableModel;
     private double toplamTutar = 0.0;
+    private double gecerliOncekiTutar = 0.0;
     private JLabel lblToplamTutar;
 
-    // Canlı Masa Takibi
     private JPanel masalarPaneli;
     private Map<String, Long> siparisZamanlari = new HashMap<>(); 
     private Map<String, String> masaDurumlari = new HashMap<>(); 
 
-    // Harici Modüller
     private MutfakModulu mutfakEkrani;
     private KasaModulu kasaEkrani;
-
+    
     public PersonelPaneli(String adSoyad, String rol) {
         this.aktifPersonel = adSoyad;
         this.aktifRol = rol;
@@ -47,7 +45,6 @@ public class PersonelPaneli extends JFrame {
         cardLayout = new CardLayout();
         icerikPaneli = new JPanel(cardLayout);
 
-        // Modülleri Başlatıyoruz
         mutfakEkrani = new MutfakModulu(this);
         kasaEkrani = new KasaModulu(this);
 
@@ -58,13 +55,14 @@ public class PersonelPaneli extends JFrame {
 
         add(icerikPaneli, BorderLayout.CENTER);
 
-        // Rol tabanlı başlangıç ekranı yönlendirmesi
         if (aktifRol.equalsIgnoreCase("Mutfak")) {
             cardLayout.show(icerikPaneli, "Mutfak Panosu");
-            mutfakEkrani.verileriYenile(); // Mutfak anında verileri çeker
+            mutfakEkrani.verileriYenile(); 
         } else {
             cardLayout.show(icerikPaneli, "Masalar ve Sipariş");
-            masaRenkGuncelleyiciyiBaslat(); // Masa süre ve renk sayacı başlar
+            gercekMasalariSunucudanCek(); 
+            masalariVeritabanindanGeriYukle(); 
+            masaRenkGuncelleyiciyiBaslat(); 
         }
     }
 
@@ -88,7 +86,6 @@ public class PersonelPaneli extends JFrame {
         solMenu.add(new JLabel("<html><font color='white'><b>MODÜLLER</b></font></html>"));
         solMenu.add(Box.createVerticalStrut(15));
 
-        // ROL BAZLI MENÜ FİLTRELEME
         if (aktifRol.equalsIgnoreCase("Kasiyer") || aktifRol.equalsIgnoreCase("Admin")) {
             solMenu.add(menuButonuOlustur("Masalar ve Sipariş", "Masalar ve Sipariş"));
             solMenu.add(Box.createVerticalStrut(10));
@@ -116,9 +113,9 @@ public class PersonelPaneli extends JFrame {
         btn.addActionListener(e -> {
             cardLayout.show(icerikPaneli, cardName);
             if(cardName.equals("Kasa Takip")) {
-                kasaEkrani.verileriYenile(); // Kasa sekmesine geçince verileri tazele
+                kasaEkrani.verileriYenile(); 
             } else if (cardName.equals("Mutfak Panosu")) {
-                mutfakEkrani.verileriYenile(); // Mutfak sekmesine geçince verileri tazele
+                mutfakEkrani.verileriYenile(); 
             }
         });
         return btn;
@@ -126,9 +123,18 @@ public class PersonelPaneli extends JFrame {
 
     private JPanel kasaVeSiparisSayfasi() {
         JPanel panel = new JPanel(new BorderLayout()); panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        
         JPanel baslikPanel = new JPanel(new BorderLayout());
+        JPanel pnlSolBaslik = new JPanel(new FlowLayout(FlowLayout.LEFT));
         JLabel lblBaslik = new JLabel("Aktif Masalar ve Sipariş Yönetimi"); lblBaslik.setFont(new Font("Arial", Font.BOLD, 22));
-        baslikPanel.add(lblBaslik, BorderLayout.WEST);
+        
+        JButton btnYenile = new JButton("🔄 Masaları Yenile");
+        btnYenile.setBackground(new Color(52, 152, 219)); btnYenile.setForeground(Color.WHITE);
+        btnYenile.setFocusPainted(false);
+        btnYenile.addActionListener(e -> { gercekMasalariSunucudanCek(); masalariVeritabanindanGeriYukle(); });
+        
+        pnlSolBaslik.add(lblBaslik); pnlSolBaslik.add(btnYenile);
+        baslikPanel.add(pnlSolBaslik, BorderLayout.WEST);
         
         if(!aktifRol.equalsIgnoreCase("Garson")) {
             JPanel pnlHizliSiparis = new JPanel(new FlowLayout(FlowLayout.RIGHT));
@@ -144,31 +150,176 @@ public class PersonelPaneli extends JFrame {
             baslikPanel.add(pnlHizliSiparis, BorderLayout.EAST);
         }
 
-        masalarPaneli = new JPanel(new GridLayout(5, 4, 15, 15));
-        masalarPaneli.setBorder(BorderFactory.createEmptyBorder(20, 0, 0, 0));
+        masalarPaneli = new JPanel(new GridLayout(0, 4, 15, 15)); 
+        masalarPaneli.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
         
-        // 20 Masa Butonu (Grid)
-        for (int i = 1; i <= 20; i++) {
-            String masaIsmi = "Masa " + i;
-            JButton masaButon = new JButton(masaIsmi);
-            masaButon.setName(masaIsmi); 
-            masaButon.setFont(new Font("Arial", Font.BOLD, 18)); masaButon.setBackground(new Color(236, 240, 241)); masaButon.setFocusPainted(false);
-            masaButon.addActionListener(e -> adisyonEkraniAc("MASA", masaIsmi));
-            masalarPaneli.add(masaButon);
-        }
-        panel.add(baslikPanel, BorderLayout.NORTH); panel.add(masalarPaneli, BorderLayout.CENTER);
+        JPanel masaSarici = new JPanel(new BorderLayout());
+        masaSarici.add(masalarPaneli, BorderLayout.NORTH); 
+        
+        panel.add(baslikPanel, BorderLayout.NORTH); 
+        panel.add(new JScrollPane(masaSarici), BorderLayout.CENTER); 
         return panel;
+    }
+
+    private void gercekMasalariSunucudanCek() {
+        new Thread(() -> {
+            String cevap = sunucuyaKomutGonderVeCevapAl("MASALARI_GETIR");
+            if (cevap != null && cevap.startsWith("MASA_LISTESI")) {
+                String[] parcalar = cevap.split("\\|");
+                SwingUtilities.invokeLater(() -> {
+                    masalarPaneli.removeAll(); 
+                    
+                    for (int i = 1; i < parcalar.length; i++) {
+                        String[] detay = parcalar[i].split(";");
+                        String masaIsmi = detay[0]; 
+
+                        JButton masaButon = new JButton(masaIsmi);
+                        masaButon.setName(masaIsmi); 
+                        masaButon.setFont(new Font("Arial", Font.BOLD, 18)); 
+                        masaButon.setBackground(new Color(236, 240, 241)); 
+                        masaButon.setFocusPainted(false);
+                        masaButon.setPreferredSize(new Dimension(200, 150)); 
+                        
+                        masaButon.addActionListener(e -> {
+                            String durum = masaDurumlari.getOrDefault(masaIsmi, "BOS");
+                            
+                            if (!durum.equals("BOS") && !aktifRol.equalsIgnoreCase("Garson")) {
+                                Object[] options = {"📝 Ek Sipariş Gir (Daha Sonra)", "💵 Hesabı Kapat (Nakit)", "💳 Hesabı Kapat (Kredi Kartı)", "❌ Vazgeç"};
+                                int secim = JOptionPane.showOptionDialog(this,
+                                        masaIsmi + " şu an aktif.\nNe yapmak istersiniz?",
+                                        "Masa İşlemleri",
+                                        JOptionPane.DEFAULT_OPTION,
+                                        JOptionPane.QUESTION_MESSAGE,
+                                        null, options, options[0]);
+
+                                if (secim == 0) {
+                                    adisyonEkraniAc("MASA", masaIsmi);
+                                } else if (secim == 1 || secim == 2) {
+                                    String odemeTuru = (secim == 1) ? "Nakit" : "Kredi Kartı";
+                                    ArrayList<String> orderIds = getMasaAdisyonIDleri(masaIsmi);
+                                    
+                                    if (!orderIds.isEmpty()) {
+                                        int onay = JOptionPane.showConfirmDialog(this, masaIsmi + " hesabı (" + orderIds.size() + " Adisyon) " + odemeTuru + " olarak kapatılacak. Emin misiniz?", "Ödeme Onayı", JOptionPane.YES_NO_OPTION);
+                                        if (onay == JOptionPane.YES_OPTION) {
+                                            for(String id : orderIds) {
+                                                sunucuyaKomutGonderVeCevapAl("SIPARIS_ODEME_AL|" + id + "|" + odemeTuru);
+                                            }
+                                            JOptionPane.showMessageDialog(this, "Hesap başarıyla alındı ve masa kapatıldı!");
+                                            masayiSifirla(masaIsmi);
+                                            kasaEkrani.verileriYenile(); 
+                                        }
+                                    } else {
+                                        JOptionPane.showMessageDialog(this, "Bu masaya ait aktif bir sipariş bulunamadı!");
+                                    }
+                                }
+                            } else {
+                                adisyonEkraniAc("MASA", masaIsmi);
+                            }
+                        });
+                        
+                        masalarPaneli.add(masaButon);
+                    }
+                    masalarPaneli.revalidate();
+                    masalarPaneli.repaint();
+                });
+            }
+        }).start();
+    }
+
+    private ArrayList<String> getMasaAdisyonIDleri(String masaIsmi) {
+        ArrayList<String> ids = new ArrayList<>();
+        String cevap = sunucuyaKomutGonderVeCevapAl("KASA_SIPARIS_GETIR");
+        if (cevap != null && cevap.startsWith("KASA_VERI|") && cevap.length() > 10) {
+            String[] siparisler = cevap.substring(10).split("\\|\\|\\|");
+            for (String s : siparisler) {
+                if (s.trim().isEmpty()) continue;
+                String[] d = s.split("~_~"); 
+                if (d.length >= 5 && d[1].equals(masaIsmi)) {
+                    ids.add(d[0]); 
+                }
+            }
+        }
+        return ids;
+    }
+
+    private void masalariVeritabanindanGeriYukle() {
+        new Thread(() -> {
+            String cevap = sunucuyaKomutGonderVeCevapAl("AKTIF_MASALARI_GETIR");
+            if (cevap != null && cevap.startsWith("AKTIF_MASALAR|") && cevap.length() > 14) {
+                String[] masalar = cevap.substring(14).split("\\|\\|\\|");
+                for (String m : masalar) {
+                    if (m.trim().isEmpty()) continue;
+                    String[] detay = m.split("~_~"); 
+                    if (detay.length == 3) {
+                        String masaAdi = detay[0];
+                        String durum = detay[1];
+                        String zamanStr = detay[2]; 
+                        
+                        long msZaman = System.currentTimeMillis();
+                        try {
+                            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+                            Date d = sdf.parse(zamanStr);
+                            msZaman = d.getTime();
+                        } catch(Exception ignored) {}
+                        
+                        if(durum.equals("BEKLEMEDE") || durum.equals("HAZIRLANIYOR")) {
+                            masaDurumlari.put(masaAdi, "HAZIRLANIYOR");
+                        } else if (durum.equals("HAZIR") || durum.equals("TESLIM_EDILDI")) {
+                            masaDurumlari.put(masaAdi, "TESLIM_EDILDI");
+                        }
+                        siparisZamanlari.put(masaAdi, msZaman);
+                    }
+                }
+            }
+        }).start();
     }
 
     private void adisyonEkraniAc(String siparisTuru, String baslikIsmi) {
         JDialog adisyonDialog = new JDialog(this, "Sipariş: " + baslikIsmi, true);
         adisyonDialog.setSize(1200, 750); adisyonDialog.setLayout(new BorderLayout()); adisyonDialog.setLocationRelativeTo(this);
 
+        gecerliOncekiTutar = 0.0; 
+        String oncekiMusteriIsmi = "";
+        StringBuilder oncekiSiparisHTML = new StringBuilder();
+        
+        boolean ekSiparisMi = siparisTuru.equals("MASA") && !masaDurumlari.getOrDefault(baslikIsmi, "BOS").equals("BOS");
+
+        if (ekSiparisMi) {
+            String cevap = sunucuyaKomutGonderVeCevapAl("KASA_SIPARIS_GETIR");
+            if (cevap != null && cevap.startsWith("KASA_VERI|") && cevap.length() > 10) {
+                String[] siparisler = cevap.substring(10).split("\\|\\|\\|");
+                for (String s : siparisler) {
+                    if (s.trim().isEmpty()) continue;
+                    String[] d = s.split("~_~"); 
+                    if (d.length >= 5 && d[1].equals(baslikIsmi)) {
+                        oncekiMusteriIsmi = d[2]; 
+                        String html = d[4];
+                        
+                        oncekiSiparisHTML.append("<div style='border-bottom: 1px dashed #ccc; padding-bottom: 5px; margin-bottom: 5px;'>")
+                                         .append(html).append("</div>");
+                        
+                        // Fiyatı güvenli parse etme (virgül/nokta hatalarını engelle)
+                        try {
+                            int fBas = html.indexOf("<b style='color:red;'>");
+                            int fSon = html.indexOf("</b>", fBas);
+                            if (fBas >= 0 && fSon > fBas) {
+                                String fiyatStr = html.substring(fBas + 21, fSon).replace(",", ".");
+                                double f = Double.parseDouble(fiyatStr);
+                                gecerliOncekiTutar += f;
+                            }
+                        } catch(Exception ignored){}
+                    }
+                }
+            }
+        }
+
         JPanel pnlMusteriBilgi = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 10));
         pnlMusteriBilgi.setBackground(new Color(44, 62, 80)); 
         pnlMusteriBilgi.setBorder(BorderFactory.createMatteBorder(0, 0, 3, 0, new Color(39, 174, 96)));
         
         JTextField txtMusteriAd = new JTextField(15);
+        if (!oncekiMusteriIsmi.isEmpty()) txtMusteriAd.setText(oncekiMusteriIsmi); 
+        
         JTextField txtMusteriTel = new JTextField(12);
         JTextField txtMusteriAdres = new JTextField(25);
         
@@ -215,23 +366,43 @@ public class PersonelPaneli extends JFrame {
 
         pnlUrunler.add(scrollKategori, BorderLayout.WEST); pnlUrunler.add(new JScrollPane(pnlUrunListesi), BorderLayout.CENTER);
 
-        JPanel pnlSepet = new JPanel(new BorderLayout()); pnlSepet.setBorder(BorderFactory.createTitledBorder("Adisyon (Sepet)"));
-        sepetTableModel = new DefaultTableModel(new String[]{"Ürün", "Adet", "Fiyat", "Not/Ekstra"}, 0);
+        JPanel pnlSepet = new JPanel(new BorderLayout(5, 5)); pnlSepet.setBorder(BorderFactory.createTitledBorder("Adisyon (Sepet)"));
+        
+        if (ekSiparisMi && oncekiSiparisHTML.length() > 0) {
+            JEditorPane txtEskiSiparisler = new JEditorPane();
+            txtEskiSiparisler.setContentType("text/html");
+            txtEskiSiparisler.setText("<html><div style='font-family: Arial; font-size: 11px;'>" + oncekiSiparisHTML.toString() + "</div></html>");
+            txtEskiSiparisler.setEditable(false);
+            txtEskiSiparisler.setBackground(new Color(250, 250, 250));
+            
+            JScrollPane scrollEski = new JScrollPane(txtEskiSiparisler);
+            scrollEski.setPreferredSize(new Dimension(0, 200));
+            scrollEski.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.GRAY), "Daha Önce Söylenenler (Mevcut Borç: " + gecerliOncekiTutar + " TL)"));
+            
+            pnlSepet.add(scrollEski, BorderLayout.NORTH);
+        }
+
+        sepetTableModel = new DefaultTableModel(new String[]{"Ürün", "Adet", "Fiyat", "Not/Ekstra"}, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) { return false; }
+        };
         JTable sepetTablosu = new JTable(sepetTableModel); sepetTablosu.getColumnModel().getColumn(3).setPreferredWidth(200); 
         pnlSepet.add(new JScrollPane(sepetTablosu), BorderLayout.CENTER);
 
         JPanel pnlAlt = new JPanel(new BorderLayout());
-        lblToplamTutar = new JLabel("Toplam: 0.0 TL"); lblToplamTutar.setFont(new Font("Arial", Font.BOLD, 22)); lblToplamTutar.setForeground(new Color(192, 57, 43));
+        lblToplamTutar = new JLabel("Toplam: 0.0 TL"); lblToplamTutar.setFont(new Font("Arial", Font.BOLD, 14)); 
         
-        JButton btnMutfagaGonder = new JButton("Siparişi Mutfağa Gönder");
-        btnMutfagaGonder.setBackground(new Color(39, 174, 96)); btnMutfagaGonder.setForeground(Color.WHITE); btnMutfagaGonder.setFont(new Font("Arial", Font.BOLD, 16));
+        hesaplaToplam(); 
+
+        JButton btnMutfagaGonder = new JButton("Yeni Siparişi Mutfağa Gönder");
+        btnMutfagaGonder.setBackground(new Color(39, 174, 96)); btnMutfagaGonder.setForeground(Color.WHITE); btnMutfagaGonder.setFont(new Font("Arial", Font.BOLD, 15));
         
         btnMutfagaGonder.addActionListener(e -> {
             String musteriAdi = txtMusteriAd.getText().trim();
             if(musteriAdi.isEmpty()) {
                 JOptionPane.showMessageDialog(adisyonDialog, "Lütfen Müşteri ismini giriniz!", "Hata", JOptionPane.ERROR_MESSAGE); return;
             }
-            if(sepetTableModel.getRowCount() == 0) { JOptionPane.showMessageDialog(adisyonDialog, "Sepet boş!"); return; }
+            if(sepetTableModel.getRowCount() == 0) { JOptionPane.showMessageDialog(adisyonDialog, "Sepet boş! Ek sipariş vermeyecekseniz pencereyi kapatın."); return; }
             
             StringBuilder fis = new StringBuilder("<html>");
             String zaman = new SimpleDateFormat("HH:mm").format(new Date());
@@ -245,9 +416,10 @@ public class PersonelPaneli extends JFrame {
                 fis.append("<b style='font-size:13px; color:blue;'>[").append(zaman).append("] 📦 GEL-AL PAKET</b><br>")
                    .append(alanKisiHTML).append("Müşteri: <b>").append(musteriAdi).append("</b><br><hr>");
             } else {
-                fis.append("<b style='font-size:13px; color:green;'>[").append(zaman).append("] 🍽 ").append(baslikIsmi).append("</b><br>")
-                   .append(alanKisiHTML).append("Masa Müşterisi: <b>").append(musteriAdi).append("</b><br><hr>");
-                siparisZamanlari.put(baslikIsmi, System.currentTimeMillis());
+                String tag = ekSiparisMi ? "➕ EK SİPARİŞ" : "🍽 YENİ MASA";
+                fis.append("<b style='font-size:13px; color:green;'>[").append(zaman).append("] ").append(tag).append(" (").append(baslikIsmi).append(")</b><br>")
+                   .append(alanKisiHTML).append("Müşteri: <b>").append(musteriAdi).append("</b><br><hr>");
+                siparisZamanlari.putIfAbsent(baslikIsmi, System.currentTimeMillis());
                 masaDurumlari.put(baslikIsmi, "HAZIRLANIYOR");
             }
 
@@ -267,9 +439,10 @@ public class PersonelPaneli extends JFrame {
                     }
                 }
             }
+            
+            fis.append("");
             fis.append("</html>");
             
-            // Veritabanına (Sunucuya) gönder
             String gonderilecekKomut = "SIPARIS_OLUSTUR|" + baslikIsmi + "|" + musteriAdi + "|" + fis.toString();
             sunucuyaKomutGonderVeCevapAl(gonderilecekKomut);
             
@@ -371,45 +544,47 @@ public class PersonelPaneli extends JFrame {
     }
 
     private void hesaplaToplam() {
-        toplamTutar = 0; for (int i = 0; i < sepetTableModel.getRowCount(); i++) toplamTutar += Double.parseDouble(sepetTableModel.getValueAt(i, 2).toString());
-        lblToplamTutar.setText("Toplam: " + toplamTutar + " TL");
+        toplamTutar = 0; 
+        for (int i = 0; i < sepetTableModel.getRowCount(); i++) {
+            // Virgül hatalarını önlemek için güvenli parse
+            toplamTutar += Double.parseDouble(sepetTableModel.getValueAt(i, 2).toString().replace(",", "."));
+        }
+        
+        if (gecerliOncekiTutar > 0) {
+            double genelToplam = gecerliOncekiTutar + toplamTutar;
+            lblToplamTutar.setText("<html>Ara Toplam: <b>" + gecerliOncekiTutar + " TL</b><br>Yeni Sipariş: <b>" + toplamTutar + " TL</b><br><font size='5' color='red'>GENEL TOPLAM: " + genelToplam + " TL</font></html>");
+        } else {
+            lblToplamTutar.setText("<html><font size='5' color='red'>Toplam: " + toplamTutar + " TL</font></html>");
+        }
     }
 
-    // Kasadan masa ödemesi alındığında KasaModulu tarafından çağrılan Sıfırlayıcı Metot
     public void masayiSifirla(String masaAdi) {
         siparisZamanlari.remove(masaAdi);
         masaDurumlari.put(masaAdi, "BOS");
+        
+        // Temizledikten sonra butonun hemen griye dönmesi için güncelleyiciyi bir tur manuel çalıştırıyoruz
+        if(masalarPaneli != null) {
+            for (Component c : masalarPaneli.getComponents()) {
+                if (c instanceof JButton) {
+                    JButton btn = (JButton) c;
+                    if(btn.getName().equals(masaAdi)) {
+                        btn.setText(masaAdi);
+                        btn.setBackground(new Color(236, 240, 241));
+                    }
+                }
+            }
+        }
     }
 
-    // Canlı Masa Takip Saati
+    // KRİTİK DÜZELTME: Masa sayacı artık butonları doğrudan okur.
     private void masaRenkGuncelleyiciyiBaslat() {
         Timer masaTimer = new Timer(1000, e -> { 
             long suan = System.currentTimeMillis();
             if(masalarPaneli != null) {
+                // masalarPaneli içindeki butonları (Component c) döngüye sok
                 for (Component c : masalarPaneli.getComponents()) {
                     if (c instanceof JButton) {
-                        JButton btn = (JButton) c;
-                        String mName = btn.getName();
-                        String durum = masaDurumlari.getOrDefault(mName, "BOS");
-                        Long acilisZamani = siparisZamanlari.get(mName);
-
-                        if (durum.equals("BOS")) {
-                            btn.setText(mName);
-                            btn.setBackground(new Color(236, 240, 241));
-                        } else {
-                            long farkMs = suan - acilisZamani;
-                            long dk = farkMs / (60 * 1000);
-                            String saatStr = new SimpleDateFormat("HH:mm").format(new Date(acilisZamani));
-                            
-                            btn.setText("<html><center>" + mName + "<br><font size='3'>Giriş: " + saatStr + "<br><b>" + dk + " dk</b></font></center></html>");
-
-                            if (durum.equals("HAZIRLANIYOR")) {
-                                if (dk >= 10) btn.setBackground(new Color(231, 76, 60)); // 10 Dk üstü Kırmızı
-                                else btn.setBackground(new Color(46, 204, 113)); // Yeşil
-                            } else if (durum.equals("TESLIM_EDILDI")) {
-                                btn.setBackground(new Color(241, 196, 15)); // Mutfak Onayladı (Sarı)
-                            }
-                        }
+                        guncelleMasaButonu((JButton) c, suan);
                     }
                 }
             }
@@ -417,7 +592,31 @@ public class PersonelPaneli extends JFrame {
         masaTimer.start();
     }
 
-    // Tüm modüllerin erişebilmesi için PUBLIC yapıldı
+    private void guncelleMasaButonu(JButton btn, long suan) {
+        String mName = btn.getName();
+        String durum = masaDurumlari.getOrDefault(mName, "BOS");
+        Long acilisZamani = siparisZamanlari.get(mName);
+
+        if (durum.equals("BOS")) {
+            btn.setText(mName);
+            btn.setBackground(new Color(236, 240, 241)); // Gri
+        } else {
+            if (acilisZamani == null) acilisZamani = suan;
+            long farkMs = suan - acilisZamani;
+            long dk = farkMs / (60 * 1000);
+            String saatStr = new SimpleDateFormat("HH:mm").format(new Date(acilisZamani));
+            
+            btn.setText("<html><center>" + mName + "<br><font size='3'>Giriş: " + saatStr + "<br><b>" + dk + " dk</b></font></center></html>");
+
+            if (durum.equals("HAZIRLANIYOR")) {
+                if (dk >= 10) btn.setBackground(new Color(231, 76, 60)); // Gecikti (Kırmızı)
+                else btn.setBackground(new Color(46, 204, 113)); // Hazırlanıyor (Yeşil)
+            } else if (durum.equals("TESLIM_EDILDI")) {
+                btn.setBackground(new Color(243, 156, 18)); // Mutfak Onayladı, Ödeme Bekliyor (Turuncu/Sarı)
+            }
+        }
+    }
+
     public String sunucuyaKomutGonderVeCevapAl(String komut) {
         try (Socket s = new Socket("localhost", 8080); PrintWriter out = new PrintWriter(s.getOutputStream(), true); BufferedReader in = new BufferedReader(new InputStreamReader(s.getInputStream()))) {
             in.readLine(); out.println(komut); return in.readLine();

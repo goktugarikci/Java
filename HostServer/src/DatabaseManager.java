@@ -510,24 +510,45 @@ public class DatabaseManager {
     // MUTFAK, KASA VE VESTİYER İŞLEMLERİ
     // ==========================================
 
-    // Sipariş Durumu Güncelleme (Mutfak ve Kasa İçin)
+// ==========================================
+    // MUTFAK VE KASA SİPARİŞ DURUM GÜNCELLEMELERİ
+    // ==========================================
+    
     public static String siparisDurumuGuncelle(int orderId, String yeniDurum) {
-        String sql = "UPDATE Siparisler SET Status = ? WHERE OrderID = ?";
+        // DİKKAT: Tablo adı 'Siparisler_Mutfak' olmalıdır.
+        String sql = "UPDATE Siparisler_Mutfak SET Durum = ? WHERE OrderID = ?";
         try (Connection conn = DriverManager.getConnection(URL);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
             pstmt.setString(1, yeniDurum);
             pstmt.setInt(2, orderId);
             int affected = pstmt.executeUpdate();
             
-            // Durum değiştiğinde Log tablosuna da yazalım
             if (affected > 0) {
-                try(PreparedStatement logStmt = conn.prepareStatement("INSERT INTO Siparis_Zaman_Loglari (OrderID, Status) VALUES (?, ?)")) {
-                    logStmt.setInt(1, orderId); logStmt.setString(2, yeniDurum); logStmt.executeUpdate();
-                }
                 return "BAŞARILI|Sipariş durumu '" + yeniDurum + "' olarak güncellendi.";
             }
-            return "HATA|Sipariş bulunamadı.";
-        } catch (Exception e) { return "HATA|Durum güncellenemedi: " + e.getMessage(); }
+            return "HATA|Sipariş bulunamadı (Eski bir tabloyu veya silinmiş bir ID'yi arıyor olabilirsiniz).";
+        } catch (Exception e) { 
+            return "HATA|Durum güncellenemedi: " + e.getMessage(); 
+        }
+    }
+
+    public static String siparisOdemeAl(int orderId, String odemeTuru) {
+        // DİKKAT: Tablo adı 'Siparisler_Mutfak' olmalıdır.
+        String sql = "UPDATE Siparisler_Mutfak SET Durum = 'ODENDI' WHERE OrderID = ?";
+        try (Connection conn = DriverManager.getConnection(URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setInt(1, orderId);
+            int affected = pstmt.executeUpdate();
+            
+            if (affected > 0) {
+                return "BAŞARILI|Sipariş başarıyla kapatıldı (" + odemeTuru + ").";
+            }
+            return "HATA|Ödenecek sipariş bulunamadı.";
+        } catch (Exception e) { 
+            return "HATA|Ödeme alınamadı: " + e.getMessage(); 
+        }
     }
 
     // Vestiyere Eşya Ekleme
@@ -652,13 +673,20 @@ public class DatabaseManager {
         } catch (Exception e) { return "HATA|Kasa verisi çekilemedi: " + e.getMessage(); }
     }
 
-    public static String siparisOdemeAl(int orderId, String odemeTuru) {
-        String sql = "UPDATE Siparisler_Mutfak SET Durum = 'ODENDI' WHERE OrderID = ?";
-        try (Connection conn = DriverManager.getConnection(URL); PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setInt(1, orderId);
-            pstmt.executeUpdate();
-            // Not: İleride burada 'Kasa_Hareketleri' tablosuna "Kredi Kartı" veya "Nakit" olarak ciro kaydı eklenebilir.
-            return "BAŞARILI|Sipariş başarıyla kapatıldı (" + odemeTuru + ").";
-        } catch (Exception e) { return "HATA|Ödeme alınamadı: " + e.getMessage(); }
+// ==========================================
+    // MASALARIN HAFIZASI (SİSTEM YENİDEN BAŞLADIĞINDA)
+    // ==========================================
+    public static String aktifMasalariGetir() {
+        StringBuilder sb = new StringBuilder("AKTIF_MASALAR|");
+        // Sadece ödenmemiş ve iptal edilmemiş "Masa" siparişlerini grupla
+        String sql = "SELECT MasaIsmi, Durum, SiparisZamani FROM Siparisler_Mutfak WHERE Durum NOT IN ('ODENDI', 'IPTAL') AND MasaIsmi LIKE 'Masa %' GROUP BY MasaIsmi";
+        try (Connection conn = DriverManager.getConnection(URL); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                sb.append(rs.getString("MasaIsmi")).append("~_~")
+                  .append(rs.getString("Durum")).append("~_~")
+                  .append(rs.getString("SiparisZamani")).append("|||");
+            }
+            return sb.toString();
+        } catch (Exception e) { return "HATA|Aktif masalar çekilemedi: " + e.getMessage(); }
     }
 }
