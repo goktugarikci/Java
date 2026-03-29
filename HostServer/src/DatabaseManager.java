@@ -819,15 +819,10 @@ public class DatabaseManager {
                     masa++;
                     masaDetay.put(mName, masaDetay.getOrDefault(mName, 0) + 1); // Hangi masa kaç kez açıldı sayacı
                 }
-
-                // Fişin içinden gizli fiyatı güvenle çek
-                int fBas = html.indexOf("", fBas);
-                    if (fEnd != -1) {
-                        try { ciro += Double.parseDouble(html.substring(fBas + 10, fEnd).replace(",", ".")); } catch(Exception ignored){}
-                    }
-                }
             }
-        } catch (Exception e) { return "HATA|Hesaplama hatası: " + e.getMessage(); }
+        } catch (Exception e) { 
+            return "HATA|Hesaplama hatası: " + e.getMessage(); 
+        }
 
         if (toplam == 0) return "HATA|Gün sonu alınacak tamamlanmış sipariş (ciro) bulunamadı!";
 

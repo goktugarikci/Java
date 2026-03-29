@@ -217,6 +217,11 @@ public class ClientHandler implements Runnable {
                     return "HATA|Eksik parametre!";
                 case "KASA_GECMIS_GETIR":
                     return DatabaseManager.kasaGecmisSiparisleriGetir();
+                case "GUN_SONU_AL":
+                    if (parcalar.length >= 2) return DatabaseManager.gunSonuAl(parcalar[1]);
+                    return "HATA|Eksik parametre!";
+                case "ESKI_RAPORLARI_GETIR":
+                    return DatabaseManager.eskiRaporlariGetir();
                 // ==========================================
                 // BİLİNMEYEN KOMUT
                 // ==========================================

@@ -90,8 +90,8 @@ public class LoginEkrani extends JFrame {
                 String adSoyad = parcalar[2];
 
                 // YETKİ KONTROLÜ
-                if (yetki.equalsIgnoreCase("Admin") || yetki.equalsIgnoreCase("Staff")) {
-                    AdminPaneli adminPaneli = new AdminPaneli(adSoyad, yetki); 
+                if (yetki.equalsIgnoreCase("Admin")) {
+                    AdminPaneli adminPaneli = new AdminPaneli(adSoyad); 
                     adminPaneli.setVisible(true);
                 } else {
                     // Garson, Kasiyer veya Mutfak için Personel Panelini Aç
