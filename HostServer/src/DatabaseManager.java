@@ -91,7 +91,7 @@ public class DatabaseManager {
                     "Durum TEXT DEFAULT 'BEKLEMEDE', " +
                     "FisHTML TEXT, " +
                     "SiparisZamani DATETIME DEFAULT CURRENT_TIMESTAMP);");
-            // REZERVASYON TABLOSU
+            // REZERVASYON TABLOSU// REZERVASYON TABLOSUNU OLUŞTUR
             stmt.execute("CREATE TABLE IF NOT EXISTS Rezervasyonlar (" +
                     "RezID INTEGER PRIMARY KEY AUTOINCREMENT, " +
                     "MasaIsmi TEXT NOT NULL, " +
@@ -100,7 +100,16 @@ public class DatabaseManager {
                     "Tarih TEXT NOT NULL, " + 
                     "Saat TEXT NOT NULL, " +  
                     "Notlar TEXT, " +
-                    "Durum TEXT DEFAULT 'AKTIF');");
+                    "Durum TEXT DEFAULT 'AKTIF');");// ========================================================
+            // YAMA: ESKİ TABLOYU SİLMEDEN YENİ SÜTUNLARI (KOLONLARI) EKLE
+            // ========================================================
+            try {
+                stmt.execute("ALTER TABLE Rezervasyonlar ADD COLUMN Telefon TEXT;");
+            } catch (Exception ignored) { } // Eğer kolon zaten varsa hata verir, görmezden gel!
+
+            try {
+                stmt.execute("ALTER TABLE Rezervasyonlar ADD COLUMN Notlar TEXT;");
+            } catch (Exception ignored) { } // Eğer kolon zaten varsa hata verir, görmezden gel!
             ilkAdminKoy(conn);
             System.out.println("Veritabanı Sistemi: Yeni Modifikatör (Malzeme) altyapısı aktif.");
             
@@ -688,8 +697,9 @@ public class DatabaseManager {
     // ==========================================
     public static String aktifMasalariGetir() {
         StringBuilder sb = new StringBuilder("AKTIF_MASALAR|");
-        // Sadece ödenmemiş ve iptal edilmemiş "Masa" siparişlerini grupla
-        String sql = "SELECT MasaIsmi, Durum, SiparisZamani FROM Siparisler_Mutfak WHERE Durum NOT IN ('ODENDI', 'IPTAL') AND MasaIsmi LIKE 'Masa %' GROUP BY MasaIsmi";
+        // DİKKAT: "MasaIsmi LIKE 'Masa %'" kısıtlamasını sildik! 
+        // Paket ve Eve Servis hariç tüm masalar listeye dahil edilir.
+        String sql = "SELECT MasaIsmi, Durum, SiparisZamani FROM Siparisler_Mutfak WHERE Durum NOT IN ('ODENDI', 'IPTAL') AND MasaIsmi NOT IN ('PAKET', 'EVE_SERVIS') GROUP BY MasaIsmi";
         try (Connection conn = DriverManager.getConnection(URL); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) {
                 sb.append(rs.getString("MasaIsmi")).append("~_~")
@@ -698,6 +708,22 @@ public class DatabaseManager {
             }
             return sb.toString();
         } catch (Exception e) { return "HATA|Aktif masalar çekilemedi: " + e.getMessage(); }
+    }
+    // Kasa Geçmiş Arşivi
+    public static String kasaGecmisSiparisleriGetir() {
+        StringBuilder sb = new StringBuilder("KASA_GECMIS_VERI|");
+        // Sadece ödenmiş ve iptal edilmiş fişleri son 50 taneye kadar getir (Kasmaması için limit konuldu)
+        String sql = "SELECT OrderID, MasaIsmi, MusteriIsmi, Durum, FisHTML FROM Siparisler_Mutfak WHERE Durum IN ('ODENDI', 'IPTAL') ORDER BY OrderID DESC LIMIT 50";
+        try (Connection conn = DriverManager.getConnection(URL); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                sb.append(rs.getInt("OrderID")).append("~_~")
+                  .append(rs.getString("MasaIsmi")).append("~_~")
+                  .append(rs.getString("MusteriIsmi")).append("~_~")
+                  .append(rs.getString("Durum")).append("~_~")
+                  .append(rs.getString("FisHTML")).append("|||");
+            }
+            return sb.toString();
+        } catch (Exception e) { return "HATA|Geçmiş veriler çekilemedi: " + e.getMessage(); }
     }
 // ==========================================
     // REZERVASYON İŞLEMLERİ (GELİŞMİŞ)

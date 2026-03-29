@@ -215,7 +215,8 @@ public class ClientHandler implements Runnable {
                 case "VESTIYER_TESLIM_ET":
                     if (parcalar.length >= 2) return DatabaseManager.vestiyerTeslimEt(Integer.parseInt(parcalar[1]));
                     return "HATA|Eksik parametre!";
-
+                case "KASA_GECMIS_GETIR":
+                    return DatabaseManager.kasaGecmisSiparisleriGetir();
                 // ==========================================
                 // BİLİNMEYEN KOMUT
                 // ==========================================
