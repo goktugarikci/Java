@@ -192,8 +192,11 @@ public class ClientHandler implements Runnable {
                     return DatabaseManager.mutfakSiparisleriGetirFull();
                 case "KASA_SIPARIS_GETIR":
                     return DatabaseManager.kasaSiparisleriGetir();
-                case "REZERVASYON_EKLE":
-                    if (parcalar.length >= 5) return DatabaseManager.rezervasyonEkle(parcalar[1], parcalar[2], parcalar[3], parcalar[4]);
+            case "REZERVASYON_EKLE":
+                    // Format: REZERVASYON_EKLE|Masa|Musteri|Telefon|Tarih|Saat|Not
+                    if (parcalar.length >= 7) {
+                        return DatabaseManager.rezervasyonEkle(parcalar[1], parcalar[2], parcalar[3], parcalar[4], parcalar[5], parcalar[6]);
+                    }
                     return "HATA|Eksik parametre!";
                 case "REZ_LISTESI_GETIR":
                     return DatabaseManager.rezervasyonlariGetir();

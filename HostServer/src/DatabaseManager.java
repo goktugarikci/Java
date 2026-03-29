@@ -96,9 +96,11 @@ public class DatabaseManager {
                     "RezID INTEGER PRIMARY KEY AUTOINCREMENT, " +
                     "MasaIsmi TEXT NOT NULL, " +
                     "MusteriAdi TEXT NOT NULL, " +
-                    "Tarih TEXT NOT NULL, " + // YYYY-MM-DD formatında
-                    "Saat TEXT NOT NULL, " +  // HH:mm formatında
-                    "Durum TEXT DEFAULT 'AKTIF');"); // AKTIF, IPTAL, GELDILER
+                    "Telefon TEXT, " +
+                    "Tarih TEXT NOT NULL, " + 
+                    "Saat TEXT NOT NULL, " +  
+                    "Notlar TEXT, " +
+                    "Durum TEXT DEFAULT 'AKTIF');");
             ilkAdminKoy(conn);
             System.out.println("Veritabanı Sistemi: Yeni Modifikatör (Malzeme) altyapısı aktif.");
             
@@ -697,32 +699,44 @@ public class DatabaseManager {
             return sb.toString();
         } catch (Exception e) { return "HATA|Aktif masalar çekilemedi: " + e.getMessage(); }
     }
+// ==========================================
+    // REZERVASYON İŞLEMLERİ (GELİŞMİŞ)
     // ==========================================
-    // REZERVASYON İŞLEMLERİ
-    // ==========================================
-    public static String rezervasyonEkle(String masa, String musteri, String tarih, String saat) {
-        String sql = "INSERT INTO Rezervasyonlar (MasaIsmi, MusteriAdi, Tarih, Saat) VALUES (?, ?, ?, ?)";
+    public static String rezervasyonEkle(String masa, String musteri, String telefon, String tarih, String saat, String notlar) {
+        // ÇİFTE REZERVASYON KONTROLÜ: Aynı masa, aynı tarihte zaten rezerve edilmiş mi?
+        String checkSql = "SELECT COUNT(*) FROM Rezervasyonlar WHERE MasaIsmi = ? AND Tarih = ? AND Durum = 'AKTIF'";
+        try (Connection conn = DriverManager.getConnection(URL); PreparedStatement checkStmt = conn.prepareStatement(checkSql)) {
+            checkStmt.setString(1, masa);
+            checkStmt.setString(2, tarih);
+            ResultSet rs = checkStmt.executeQuery();
+            if (rs.next() && rs.getInt(1) > 0) {
+                return "HATA|Bu masa " + tarih + " tarihinde zaten rezerve edilmiştir!";
+            }
+        } catch (Exception e) { return "HATA|Kontrol hatası: " + e.getMessage(); }
+
+        // Müsaitse kaydı oluştur
+        String sql = "INSERT INTO Rezervasyonlar (MasaIsmi, MusteriAdi, Telefon, Tarih, Saat, Notlar) VALUES (?, ?, ?, ?, ?, ?)";
         try (Connection conn = DriverManager.getConnection(URL); PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, masa); pstmt.setString(2, musteri); pstmt.setString(3, tarih); pstmt.setString(4, saat);
+            pstmt.setString(1, masa); pstmt.setString(2, musteri); pstmt.setString(3, telefon); 
+            pstmt.setString(4, tarih); pstmt.setString(5, saat); pstmt.setString(6, notlar);
             pstmt.executeUpdate();
             return "BAŞARILI|Rezervasyon eklendi.";
         } catch (Exception e) { return "HATA|Kayıt başarısız: " + e.getMessage(); }
     }
 
-    // Admin/Kasa ekranı için tüm aktif rezervasyonlar
     public static String rezervasyonlariGetir() {
         StringBuilder sb = new StringBuilder("REZ_LISTESI|");
-        String sql = "SELECT RezID, MasaIsmi, MusteriAdi, Tarih, Saat FROM Rezervasyonlar WHERE Durum = 'AKTIF' ORDER BY Tarih ASC, Saat ASC";
+        String sql = "SELECT RezID, MasaIsmi, MusteriAdi, Telefon, Tarih, Saat, Notlar FROM Rezervasyonlar WHERE Durum = 'AKTIF' ORDER BY Tarih ASC, Saat ASC";
         try (Connection conn = DriverManager.getConnection(URL); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) {
                 sb.append(rs.getInt("RezID")).append("~_~").append(rs.getString("MasaIsmi")).append("~_~")
-                  .append(rs.getString("MusteriAdi")).append("~_~").append(rs.getString("Tarih")).append("~_~")
-                  .append(rs.getString("Saat")).append("|||");
+                  .append(rs.getString("MusteriAdi")).append("~_~").append(rs.getString("Telefon")).append("~_~")
+                  .append(rs.getString("Tarih")).append("~_~").append(rs.getString("Saat")).append("~_~")
+                  .append(rs.getString("Notlar")).append("|||");
             }
             return sb.toString();
         } catch (Exception e) { return "HATA|Rezervasyonlar çekilemedi: " + e.getMessage(); }
     }
-
     // Masaları boyamak için sadece BUGÜNÜN rezervasyonları
     public static String bugunkuRezervasyonlariGetir(String bugunTarih) {
         StringBuilder sb = new StringBuilder("BUGUN_REZ|");
