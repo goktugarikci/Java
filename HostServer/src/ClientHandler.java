@@ -192,7 +192,17 @@ public class ClientHandler implements Runnable {
                     return DatabaseManager.mutfakSiparisleriGetirFull();
                 case "KASA_SIPARIS_GETIR":
                     return DatabaseManager.kasaSiparisleriGetir();
-
+                case "REZERVASYON_EKLE":
+                    if (parcalar.length >= 5) return DatabaseManager.rezervasyonEkle(parcalar[1], parcalar[2], parcalar[3], parcalar[4]);
+                    return "HATA|Eksik parametre!";
+                case "REZ_LISTESI_GETIR":
+                    return DatabaseManager.rezervasyonlariGetir();
+                case "BUGUN_REZ_GETIR":
+                    if (parcalar.length >= 2) return DatabaseManager.bugunkuRezervasyonlariGetir(parcalar[1]);
+                    return "HATA|Eksik parametre!";
+                case "REZ_DURUM_GUNCELLE":
+                    if (parcalar.length >= 3) return DatabaseManager.rezervasyonDurumGuncelle(Integer.parseInt(parcalar[1]), parcalar[2]);
+                    return "HATA|Eksik parametre!";
                 // ==========================================
                 // 7. VESTİYER İŞLEMLERİ
                 // ==========================================

@@ -91,6 +91,14 @@ public class DatabaseManager {
                     "Durum TEXT DEFAULT 'BEKLEMEDE', " +
                     "FisHTML TEXT, " +
                     "SiparisZamani DATETIME DEFAULT CURRENT_TIMESTAMP);");
+            // REZERVASYON TABLOSU
+            stmt.execute("CREATE TABLE IF NOT EXISTS Rezervasyonlar (" +
+                    "RezID INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                    "MasaIsmi TEXT NOT NULL, " +
+                    "MusteriAdi TEXT NOT NULL, " +
+                    "Tarih TEXT NOT NULL, " + // YYYY-MM-DD formatında
+                    "Saat TEXT NOT NULL, " +  // HH:mm formatında
+                    "Durum TEXT DEFAULT 'AKTIF');"); // AKTIF, IPTAL, GELDILER
             ilkAdminKoy(conn);
             System.out.println("Veritabanı Sistemi: Yeni Modifikatör (Malzeme) altyapısı aktif.");
             
@@ -688,5 +696,52 @@ public class DatabaseManager {
             }
             return sb.toString();
         } catch (Exception e) { return "HATA|Aktif masalar çekilemedi: " + e.getMessage(); }
+    }
+    // ==========================================
+    // REZERVASYON İŞLEMLERİ
+    // ==========================================
+    public static String rezervasyonEkle(String masa, String musteri, String tarih, String saat) {
+        String sql = "INSERT INTO Rezervasyonlar (MasaIsmi, MusteriAdi, Tarih, Saat) VALUES (?, ?, ?, ?)";
+        try (Connection conn = DriverManager.getConnection(URL); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, masa); pstmt.setString(2, musteri); pstmt.setString(3, tarih); pstmt.setString(4, saat);
+            pstmt.executeUpdate();
+            return "BAŞARILI|Rezervasyon eklendi.";
+        } catch (Exception e) { return "HATA|Kayıt başarısız: " + e.getMessage(); }
+    }
+
+    // Admin/Kasa ekranı için tüm aktif rezervasyonlar
+    public static String rezervasyonlariGetir() {
+        StringBuilder sb = new StringBuilder("REZ_LISTESI|");
+        String sql = "SELECT RezID, MasaIsmi, MusteriAdi, Tarih, Saat FROM Rezervasyonlar WHERE Durum = 'AKTIF' ORDER BY Tarih ASC, Saat ASC";
+        try (Connection conn = DriverManager.getConnection(URL); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                sb.append(rs.getInt("RezID")).append("~_~").append(rs.getString("MasaIsmi")).append("~_~")
+                  .append(rs.getString("MusteriAdi")).append("~_~").append(rs.getString("Tarih")).append("~_~")
+                  .append(rs.getString("Saat")).append("|||");
+            }
+            return sb.toString();
+        } catch (Exception e) { return "HATA|Rezervasyonlar çekilemedi: " + e.getMessage(); }
+    }
+
+    // Masaları boyamak için sadece BUGÜNÜN rezervasyonları
+    public static String bugunkuRezervasyonlariGetir(String bugunTarih) {
+        StringBuilder sb = new StringBuilder("BUGUN_REZ|");
+        String sql = "SELECT MasaIsmi, MusteriAdi, Saat FROM Rezervasyonlar WHERE Durum = 'AKTIF' AND Tarih = ?";
+        try (Connection conn = DriverManager.getConnection(URL); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, bugunTarih);
+            ResultSet rs = pstmt.executeQuery();
+            while (rs.next()) {
+                sb.append(rs.getString("MasaIsmi")).append("~_~").append(rs.getString("Saat")).append("~_~").append(rs.getString("MusteriAdi")).append("|||");
+            }
+            return sb.toString();
+        } catch (Exception e) { return "HATA|Bugünün rezervasyonları çekilemedi: " + e.getMessage(); }
+    }
+
+    public static String rezervasyonDurumGuncelle(int id, String durum) {
+        String sql = "UPDATE Rezervasyonlar SET Durum = ? WHERE RezID = ?";
+        try (Connection conn = DriverManager.getConnection(URL); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, durum); pstmt.setInt(2, id); pstmt.executeUpdate();
+            return "BAŞARILI|Rezervasyon güncellendi.";
+        } catch (Exception e) { return "HATA|Güncelleme başarısız: " + e.getMessage(); }
     }
 }
