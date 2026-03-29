@@ -148,20 +148,32 @@ public class AdminPaneli extends JFrame {
         btnDetay.addActionListener(e -> {
             int row = zRaporTablo.getSelectedRow();
             if (row != -1) {
-                String detay = zRaporTableModel.getValueAt(row, 6).toString();
                 String ciro = zRaporTableModel.getValueAt(row, 1).toString();
                 String tarih = zRaporTableModel.getValueAt(row, 0).toString();
+                String masaDetay = zRaporTableModel.getValueAt(row, 6).toString();
+                String stokDetay = zRaporTableModel.getValueAt(row, 7).toString(); // Yeni Stok Verisi
                 
-                String[] masalar = detay.split(",");
-                StringBuilder mesaj = new StringBuilder("<html><div style='font-family:Arial; font-size:14px;'><h2>" + tarih + " - Masa Analizi</h2>");
-                mesaj.append("<b>Toplam Ciro: </b><font color='green'>").append(ciro).append("</font><br><hr>");
-                for(String m : masalar) {
+                StringBuilder mesaj = new StringBuilder("<html><div style='font-family:Arial; font-size:14px; width:400px;'><h2>" + tarih + " - Z Raporu Analizi</h2>");
+                mesaj.append("<b>Kapanış Cirosu: </b><font color='green' size='5'>").append(ciro).append("</font><br><hr>");
+                
+                mesaj.append("<h3>🍽️ Masa Kullanım Analizi</h3>");
+                for(String m : masaDetay.split(",")) {
                     if(!m.trim().isEmpty()) {
                         String[] md = m.split(":");
                         if(md.length == 2) mesaj.append("► <b>").append(md[0]).append("</b> : ").append(md[1]).append(" defa sipariş aldı.<br>");
                     }
                 }
+                
+                mesaj.append("<hr><h3>📦 Günlük Satış ve Stok Analizi</h3>");
+                if (stokDetay.equals("Satış Yok")) {
+                    mesaj.append("<i>Stok düşülecek ürün satışı bulunamadı.</i>");
+                } else {
+                    for(String s : stokDetay.split("\\|")) {
+                        if(!s.trim().isEmpty()) mesaj.append("► ").append(s).append("<br>");
+                    }
+                }
                 mesaj.append("</div></html>");
+                
                 JOptionPane.showMessageDialog(this, mesaj.toString(), "Z Raporu Detayı", JOptionPane.INFORMATION_MESSAGE);
             } else {
                 JOptionPane.showMessageDialog(this, "Lütfen detayını görmek istediğiniz raporu tablodan seçin!");

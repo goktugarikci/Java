@@ -16,7 +16,7 @@ public class DatabaseManager {
             
             // Yabancı anahtar (Foreign Key) desteğini aktif et
             stmt.execute("PRAGMA foreign_keys = ON;");
-
+                
             // Kullanicilar
             stmt.execute("CREATE TABLE IF NOT EXISTS Kullanicilar (" +
                     "UserID INTEGER PRIMARY KEY AUTOINCREMENT, " +
@@ -113,7 +113,14 @@ public class DatabaseManager {
                     "EveServisSayisi INTEGER, " +
                     "MasaSayisi INTEGER, " +
                     "MasaDetay TEXT);");
-                                // YAMA: ESKİ TABLOYU SİLMEDEN YENİ SÜTUNLARI (KOLONLARI) EKLE
+            // GÜNLÜK SATIŞLAR VE STOK TABLOLARI
+            stmt.execute("CREATE TABLE IF NOT EXISTS GunlukSatislar (SatisID INTEGER PRIMARY KEY AUTOINCREMENT, UrunAdi TEXT, Adet INTEGER);");
+            // Kurye Takibi İçin Yama (Eski tabloyu silmeden yeni kolon ekler)
+            try { stmt.execute("ALTER TABLE Siparisler_Mutfak ADD COLUMN Kurye TEXT DEFAULT 'Atanmadi';"); } catch (Exception ignored) {}
+            // Eğer Urunler tablosunda Stok kolonu yoksa otomatik ekle (Yama)
+            try { stmt.execute("ALTER TABLE Urunler ADD COLUMN Stok INTEGER DEFAULT 100;"); } catch (Exception ignored) {}
+            // Eğer GunSonuRaporlari tablosunda StokDetay yoksa ekle (Yama)
+            try { stmt.execute("ALTER TABLE GunSonuRaporlari ADD COLUMN StokDetay TEXT;"); } catch (Exception ignored) {}
             // ========================================================
             try {
                 stmt.execute("ALTER TABLE Rezervasyonlar ADD COLUMN Telefon TEXT;");
@@ -796,57 +803,94 @@ public class DatabaseManager {
             return "BAŞARILI|Rezervasyon güncellendi.";
         } catch (Exception e) { return "HATA|Güncelleme başarısız: " + e.getMessage(); }
     }
-    // ==========================================
-    // GÜN SONU VE Z RAPORU İŞLEMLERİ
-    // ==========================================
+    
+    public static String siparisOlustur(String masa, String musteri, String html, String urunlerData) {
+        // datetime('now','localtime') sayesinde Türkiye saatine tam uyumlu kayıt yapar.
+        String sql = "INSERT INTO Siparisler_Mutfak (MasaIsmi, MusteriIsmi, FisHTML, SiparisZamani, Durum) VALUES (?, ?, ?, datetime('now','localtime'), 'BEKLEMEDE')";
+        try (Connection conn = DriverManager.getConnection(URL); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, masa); pstmt.setString(2, musteri); pstmt.setString(3, html);
+            pstmt.executeUpdate();
+            
+            // ARKA PLAN: STOK DÜŞME VE GÜNLÜK SATIŞA YAZMA
+            if (urunlerData != null && !urunlerData.isEmpty() && !urunlerData.equals("null")) {
+                String[] urunler = urunlerData.split(",");
+                for (String u : urunler) {
+                    String[] detay = u.split(":");
+                    if (detay.length == 2) {
+                        String ad = detay[0]; int adet = Integer.parseInt(detay[1]);
+                        // Stok Düş
+                        try(PreparedStatement p1 = conn.prepareStatement("UPDATE Urunler SET Stok = Stok - ? WHERE UrunAdi = ?")) {
+                            p1.setInt(1, adet); p1.setString(2, ad); p1.executeUpdate();
+                        }
+                        // Günlük Satış Listesine Ekle
+                        try(PreparedStatement p2 = conn.prepareStatement("INSERT INTO GunlukSatislar (UrunAdi, Adet) VALUES (?, ?)")) {
+                            p2.setString(1, ad); p2.setInt(2, adet); p2.executeUpdate();
+                        }
+                    }
+                }
+            }
+            return "BAŞARILI|Sipariş oluşturuldu.";
+        } catch (Exception e) { return "HATA|" + e.getMessage(); }
+    }
+
     public static String gunSonuAl(String tarih) {
-        double ciro = 0.0;
-        int toplam = 0, paket = 0, eve = 0, masa = 0;
+        double ciro = 0.0; int toplam = 0, paket = 0, eve = 0, masa = 0;
         Map<String, Integer> masaDetay = new HashMap<>();
 
-        // Sadece BUGÜN ödenmiş fişleri hesapla
         String selectSql = "SELECT MasaIsmi, FisHTML FROM Siparisler_Mutfak WHERE Durum = 'ODENDI'";
         try (Connection conn = DriverManager.getConnection(URL); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(selectSql)) {
             while (rs.next()) {
-                toplam++;
-                String mName = rs.getString("MasaIsmi");
-                String html = rs.getString("FisHTML");
-
-                // Hangi türden kaç sipariş var ayırıyoruz
+                toplam++; String mName = rs.getString("MasaIsmi"); String html = rs.getString("FisHTML");
                 if (mName.contains("PAKET")) paket++;
                 else if (mName.contains("EVE_SERVIS")) eve++;
-                else {
-                    masa++;
-                    masaDetay.put(mName, masaDetay.getOrDefault(mName, 0) + 1); // Hangi masa kaç kez açıldı sayacı
+                else { masa++; masaDetay.put(mName, masaDetay.getOrDefault(mName, 0) + 1); }
+
+                int fBas = html.indexOf("<b>");
+                if (fBas != -1) {
+                    int fEnd = html.indexOf("</b>", fBas);
+                    if (fEnd != -1) {
+                        try { ciro += Double.parseDouble(html.substring(fBas + 3, fEnd).replace(" TL", "").replace(",", ".").trim()); } catch(Exception ignored){}
+                    }
                 }
             }
-        } catch (Exception e) { 
-            return "HATA|Hesaplama hatası: " + e.getMessage(); 
-        }
+        } catch (Exception e) { return "HATA|Hesaplama hatası: " + e.getMessage(); }
 
         if (toplam == 0) return "HATA|Gün sonu alınacak tamamlanmış sipariş (ciro) bulunamadı!";
 
-        // Masaların kullanım detaylarını String'e çevir (Örn: Masa 1:5,Teras 2:3)
         StringBuilder detayStr = new StringBuilder();
-        for (Map.Entry<String, Integer> entry : masaDetay.entrySet()) {
-            detayStr.append(entry.getKey()).append(":").append(entry.getValue()).append(",");
-        }
+        for (Map.Entry<String, Integer> entry : masaDetay.entrySet()) detayStr.append(entry.getKey()).append(":").append(entry.getValue()).append(",");
 
-        // Raporu Veritabanına Kalıcı Olarak Kaydet
-        String insertSql = "INSERT INTO GunSonuRaporlari (Tarih, Ciro, ToplamSiparis, PaketSayisi, EveServisSayisi, MasaSayisi, MasaDetay) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        // === STOK (SATIŞ) ANALİZİNİ ÇIKAR VE SIFIRLA ===
+        StringBuilder stokDetayStr = new StringBuilder();
+        try (Connection conn = DriverManager.getConnection(URL)) {
+            String satisSql = "SELECT UrunAdi, SUM(Adet) as ToplamAdet FROM GunlukSatislar GROUP BY UrunAdi";
+            try (Statement st = conn.createStatement(); ResultSet rsSatis = st.executeQuery(satisSql)) {
+                while(rsSatis.next()) {
+                    String uAd = rsSatis.getString("UrunAdi"); int tAdet = rsSatis.getInt("ToplamAdet");
+                    int kalanStok = 0;
+                    try(PreparedStatement psStok = conn.prepareStatement("SELECT Stok FROM Urunler WHERE UrunAdi = ?")) {
+                        psStok.setString(1, uAd); ResultSet rsStok = psStok.executeQuery();
+                        if(rsStok.next()) kalanStok = rsStok.getInt("Stok");
+                    }
+                    stokDetayStr.append(uAd).append(" : ").append(tAdet).append(" adet satıldı (Stokta Kalan: ").append(kalanStok).append(")|");
+                }
+            }
+            try(Statement st2 = conn.createStatement()) { st2.executeUpdate("DELETE FROM GunlukSatislar"); } // Günü Sıfırla
+        } catch(Exception ignored) {}
+
+        String finalStok = stokDetayStr.length() > 0 ? stokDetayStr.toString() : "Satış Yok";
+
+        String insertSql = "INSERT INTO GunSonuRaporlari (Tarih, Ciro, ToplamSiparis, PaketSayisi, EveServisSayisi, MasaSayisi, MasaDetay, StokDetay) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         try (Connection conn = DriverManager.getConnection(URL); PreparedStatement pstmt = conn.prepareStatement(insertSql)) {
-            pstmt.setString(1, tarih); pstmt.setDouble(2, ciro); pstmt.setInt(3, toplam);
-            pstmt.setInt(4, paket); pstmt.setInt(5, eve); pstmt.setInt(6, masa); pstmt.setString(7, detayStr.toString());
+            pstmt.setString(1, tarih); pstmt.setDouble(2, ciro); pstmt.setInt(3, toplam); pstmt.setInt(4, paket); pstmt.setInt(5, eve); pstmt.setInt(6, masa); pstmt.setString(7, detayStr.toString()); pstmt.setString(8, finalStok);
             pstmt.executeUpdate();
         } catch (Exception e) { return "HATA|Rapor kaydedilemedi: " + e.getMessage(); }
 
-        // SİHRİ BURADA: Eski kayıtların sonuna "_ARSIV" ekleyerek onları günlük ekranlardan tamamen gizleriz!
-        String updateSql = "UPDATE Siparisler_Mutfak SET Durum = Durum || '_ARSIV' WHERE Durum IN ('ODENDI', 'IPTAL')";
         try (Connection conn = DriverManager.getConnection(URL); Statement stmt = conn.createStatement()) {
-            stmt.executeUpdate(updateSql);
-        } catch (Exception e) { return "HATA|Arşivleme hatası: " + e.getMessage(); }
+            stmt.executeUpdate("UPDATE Siparisler_Mutfak SET Durum = Durum || '_ARSIV' WHERE Durum IN ('ODENDI', 'IPTAL')");
+        } catch (Exception ignored) {}
 
-        return "BAŞARILI|Gün sonu Z Raporu başarıyla alındı ve siparişler arşivlendi.";
+        return "BAŞARILI|Gün sonu Z Raporu başarıyla alındı.";
     }
 
     public static String eskiRaporlariGetir() {
@@ -857,9 +901,41 @@ public class DatabaseManager {
                 sb.append(rs.getString("Tarih")).append("~_~").append(rs.getDouble("Ciro")).append("~_~")
                   .append(rs.getInt("ToplamSiparis")).append("~_~").append(rs.getInt("PaketSayisi")).append("~_~")
                   .append(rs.getInt("EveServisSayisi")).append("~_~").append(rs.getInt("MasaSayisi")).append("~_~")
-                  .append(rs.getString("MasaDetay")).append("|||");
+                  .append(rs.getString("MasaDetay")).append("~_~").append(rs.getString("StokDetay")).append("|||");
             }
             return sb.toString();
         } catch (Exception e) { return "HATA|Raporlar çekilemedi: " + e.getMessage(); }
     }
+    // ==========================================
+    // KURYE / MOTORCU İŞLEMLERİ
+    // ==========================================
+    public static String kuryeListesiGetir() {
+        // Sistemde dinamik personel tablosu yoksa test edebilmen için sahte kuryeler oluşturur
+        return "KURYE_LISTESI|Ahmet Motorcu|Mehmet Kurye|Hızlı Ali";
+    }
+
+    public static String kuryeAta(int orderId, String kuryeAdi) {
+        String sql = "UPDATE Siparisler_Mutfak SET Kurye = ?, Durum = 'YOLA_CIKTI' WHERE OrderID = ?";
+        try (Connection conn = DriverManager.getConnection(URL); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, kuryeAdi); pstmt.setInt(2, orderId); pstmt.executeUpdate();
+            return "BAŞARILI|Kurye (" + kuryeAdi + ") atandı ve sipariş yola çıktı.";
+        } catch (Exception e) { return "HATA|Kurye atanamadı: " + e.getMessage(); }
+    }
+
+    public static String kuryeSiparisleriGetir(String kuryeAdi) {
+        StringBuilder sb = new StringBuilder("KURYE_SIPARISLERI|");
+        String sql = "SELECT OrderID, MusteriIsmi, Durum, FisHTML FROM Siparisler_Mutfak WHERE Kurye = ? AND Durum IN ('YOLA_CIKTI', 'ODENDI', 'IPTAL') ORDER BY OrderID DESC LIMIT 50";
+        try (Connection conn = DriverManager.getConnection(URL); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, kuryeAdi);
+            ResultSet rs = pstmt.executeQuery();
+            while (rs.next()) {
+                sb.append(rs.getInt("OrderID")).append("~_~")
+                  .append(rs.getString("MusteriIsmi")).append("~_~")
+                  .append(rs.getString("Durum")).append("~_~")
+                  .append(rs.getString("FisHTML")).append("|||");
+            }
+            return sb.toString();
+        } catch (Exception e) { return "HATA|Kurye siparişleri çekilemedi: " + e.getMessage(); }
+    }
+    
 }

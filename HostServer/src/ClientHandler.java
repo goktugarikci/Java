@@ -165,19 +165,7 @@ public class ClientHandler implements Runnable {
                     if (parcalar.length >= 2) return DatabaseManager.masaSil(parcalar[1]);
                     return "HATA|Eksik parametre!";
                 case "AKTIF_MASALARI_GETIR": // Masa Hafızası Komutu
-                    return DatabaseManager.aktifMasalariGetir();
-
-                // ==========================================
-                // 6. SİPARİŞ, KASA VE MUTFAK İŞLEMLERİ
-                // ==========================================
-                case "SIPARIS_OLUSTUR":
-                    if (parcalar.length >= 4) {
-                        // FisHTML içinde "|" karakteri olabileceği için substring ile en sondaki HTML bloğunu alıyoruz.
-                        String fisHtml = komut.substring(komut.indexOf(parcalar[3]));
-                        return DatabaseManager.siparisOlustur(parcalar[1], parcalar[2], fisHtml); 
-                    }
-                    return "HATA|Eksik parametre!";
-                
+                    return DatabaseManager.aktifMasalariGetir();                
                 case "SIPARIS_DURUM_GUNCELLE":
                     if (parcalar.length >= 3) return DatabaseManager.siparisDurumuGuncelle(Integer.parseInt(parcalar[1]), parcalar[2]);
                     return "HATA|Eksik parametre!";
@@ -222,6 +210,21 @@ public class ClientHandler implements Runnable {
                     return "HATA|Eksik parametre!";
                 case "ESKI_RAPORLARI_GETIR":
                     return DatabaseManager.eskiRaporlariGetir();
+                case "SIPARIS_OLUSTUR":
+                    // Format: SIPARIS_OLUSTUR|Masa|Musteri|FisHTML|UrunlerDatasi
+                    if (parcalar.length >= 4) {
+                        String urunlerDatasi = parcalar.length > 4 ? parcalar[4] : "";
+                        return DatabaseManager.siparisOlustur(parcalar[1], parcalar[2], parcalar[3], urunlerDatasi);
+                    }
+                    return "HATA|Eksik parametre!";
+                case "KURYELERI_GETIR":
+                    return DatabaseManager.kuryeListesiGetir();
+                case "KURYE_ATA":
+                    if (parcalar.length >= 3) return DatabaseManager.kuryeAta(Integer.parseInt(parcalar[1]), parcalar[2]);
+                    return "HATA|Eksik parametre!";
+                case "KURYE_SIPARISLERI_GETIR":
+                    if (parcalar.length >= 2) return DatabaseManager.kuryeSiparisleriGetir(parcalar[1]);
+                    return "HATA|Eksik parametre!";
                 // ==========================================
                 // BİLİNMEYEN KOMUT
                 // ==========================================
