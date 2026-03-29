@@ -1,6 +1,8 @@
 package src; // VS Code paket hatası verirse bu satırı silin
 
 import java.sql.*;
+import java.util.HashMap;
+import java.util.Map;
 
 public class DatabaseManager {
     private static final String URL = "jdbc:sqlite:uygulama_veritabani.db";
@@ -100,8 +102,18 @@ public class DatabaseManager {
                     "Tarih TEXT NOT NULL, " + 
                     "Saat TEXT NOT NULL, " +  
                     "Notlar TEXT, " +
-                    "Durum TEXT DEFAULT 'AKTIF');");// ========================================================
-            // YAMA: ESKİ TABLOYU SİLMEDEN YENİ SÜTUNLARI (KOLONLARI) EKLE
+                    "Durum TEXT DEFAULT 'AKTIF');");
+                    // GÜN SONU (Z RAPORU) TABLOSU
+            stmt.execute("CREATE TABLE IF NOT EXISTS GunSonuRaporlari (" +
+                    "RaporID INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                    "Tarih TEXT NOT NULL, " +
+                    "Ciro REAL, " +
+                    "ToplamSiparis INTEGER, " +
+                    "PaketSayisi INTEGER, " +
+                    "EveServisSayisi INTEGER, " +
+                    "MasaSayisi INTEGER, " +
+                    "MasaDetay TEXT);");
+                                // YAMA: ESKİ TABLOYU SİLMEDEN YENİ SÜTUNLARI (KOLONLARI) EKLE
             // ========================================================
             try {
                 stmt.execute("ALTER TABLE Rezervasyonlar ADD COLUMN Telefon TEXT;");
@@ -783,5 +795,76 @@ public class DatabaseManager {
             pstmt.setString(1, durum); pstmt.setInt(2, id); pstmt.executeUpdate();
             return "BAŞARILI|Rezervasyon güncellendi.";
         } catch (Exception e) { return "HATA|Güncelleme başarısız: " + e.getMessage(); }
+    }
+    // ==========================================
+    // GÜN SONU VE Z RAPORU İŞLEMLERİ
+    // ==========================================
+    public static String gunSonuAl(String tarih) {
+        double ciro = 0.0;
+        int toplam = 0, paket = 0, eve = 0, masa = 0;
+        Map<String, Integer> masaDetay = new HashMap<>();
+
+        // Sadece BUGÜN ödenmiş fişleri hesapla
+        String selectSql = "SELECT MasaIsmi, FisHTML FROM Siparisler_Mutfak WHERE Durum = 'ODENDI'";
+        try (Connection conn = DriverManager.getConnection(URL); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(selectSql)) {
+            while (rs.next()) {
+                toplam++;
+                String mName = rs.getString("MasaIsmi");
+                String html = rs.getString("FisHTML");
+
+                // Hangi türden kaç sipariş var ayırıyoruz
+                if (mName.contains("PAKET")) paket++;
+                else if (mName.contains("EVE_SERVIS")) eve++;
+                else {
+                    masa++;
+                    masaDetay.put(mName, masaDetay.getOrDefault(mName, 0) + 1); // Hangi masa kaç kez açıldı sayacı
+                }
+
+                // Fişin içinden gizli fiyatı güvenle çek
+                int fBas = html.indexOf("", fBas);
+                    if (fEnd != -1) {
+                        try { ciro += Double.parseDouble(html.substring(fBas + 10, fEnd).replace(",", ".")); } catch(Exception ignored){}
+                    }
+                }
+            }
+        } catch (Exception e) { return "HATA|Hesaplama hatası: " + e.getMessage(); }
+
+        if (toplam == 0) return "HATA|Gün sonu alınacak tamamlanmış sipariş (ciro) bulunamadı!";
+
+        // Masaların kullanım detaylarını String'e çevir (Örn: Masa 1:5,Teras 2:3)
+        StringBuilder detayStr = new StringBuilder();
+        for (Map.Entry<String, Integer> entry : masaDetay.entrySet()) {
+            detayStr.append(entry.getKey()).append(":").append(entry.getValue()).append(",");
+        }
+
+        // Raporu Veritabanına Kalıcı Olarak Kaydet
+        String insertSql = "INSERT INTO GunSonuRaporlari (Tarih, Ciro, ToplamSiparis, PaketSayisi, EveServisSayisi, MasaSayisi, MasaDetay) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        try (Connection conn = DriverManager.getConnection(URL); PreparedStatement pstmt = conn.prepareStatement(insertSql)) {
+            pstmt.setString(1, tarih); pstmt.setDouble(2, ciro); pstmt.setInt(3, toplam);
+            pstmt.setInt(4, paket); pstmt.setInt(5, eve); pstmt.setInt(6, masa); pstmt.setString(7, detayStr.toString());
+            pstmt.executeUpdate();
+        } catch (Exception e) { return "HATA|Rapor kaydedilemedi: " + e.getMessage(); }
+
+        // SİHRİ BURADA: Eski kayıtların sonuna "_ARSIV" ekleyerek onları günlük ekranlardan tamamen gizleriz!
+        String updateSql = "UPDATE Siparisler_Mutfak SET Durum = Durum || '_ARSIV' WHERE Durum IN ('ODENDI', 'IPTAL')";
+        try (Connection conn = DriverManager.getConnection(URL); Statement stmt = conn.createStatement()) {
+            stmt.executeUpdate(updateSql);
+        } catch (Exception e) { return "HATA|Arşivleme hatası: " + e.getMessage(); }
+
+        return "BAŞARILI|Gün sonu Z Raporu başarıyla alındı ve siparişler arşivlendi.";
+    }
+
+    public static String eskiRaporlariGetir() {
+        StringBuilder sb = new StringBuilder("GUNSONU_RAPORLARI|");
+        String sql = "SELECT * FROM GunSonuRaporlari ORDER BY RaporID DESC";
+        try (Connection conn = DriverManager.getConnection(URL); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                sb.append(rs.getString("Tarih")).append("~_~").append(rs.getDouble("Ciro")).append("~_~")
+                  .append(rs.getInt("ToplamSiparis")).append("~_~").append(rs.getInt("PaketSayisi")).append("~_~")
+                  .append(rs.getInt("EveServisSayisi")).append("~_~").append(rs.getInt("MasaSayisi")).append("~_~")
+                  .append(rs.getString("MasaDetay")).append("|||");
+            }
+            return sb.toString();
+        } catch (Exception e) { return "HATA|Raporlar çekilemedi: " + e.getMessage(); }
     }
 }
