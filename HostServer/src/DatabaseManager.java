@@ -17,12 +17,13 @@ public class DatabaseManager {
             // Yabancı anahtar (Foreign Key) desteğini aktif et
             stmt.execute("PRAGMA foreign_keys = ON;");
                 
-            // Kullanicilar
+// KULLANICI (PERSONEL) TABLOSU
             stmt.execute("CREATE TABLE IF NOT EXISTS Kullanicilar (" +
-                    "UserID INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "UserName TEXT NOT NULL UNIQUE, Password TEXT NOT NULL, " +
-                    "FirstName TEXT, LastName TEXT, Role TEXT, " +
-                    "Email TEXT, Phone TEXT, Address TEXT);");
+                    "ID INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                    "KullaniciAdi TEXT UNIQUE NOT NULL, " +
+                    "Sifre TEXT NOT NULL, " +
+                    "AdSoyad TEXT NOT NULL, " +
+                    "Rol TEXT NOT NULL);");
 
             // Kategoriler
             stmt.execute("CREATE TABLE IF NOT EXISTS Kategoriler (" +
