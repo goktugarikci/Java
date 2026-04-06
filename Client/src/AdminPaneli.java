@@ -1,3 +1,5 @@
+
+
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
@@ -7,6 +9,8 @@ import java.io.PrintWriter;
 import java.net.Socket;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class AdminPaneli extends JFrame {
     private String aktifPersonel;
@@ -52,7 +56,7 @@ public class AdminPaneli extends JFrame {
 
     private void ustBarAyarla() {
         JPanel ustBar = new JPanel(new BorderLayout());
-        ustBar.setBackground(new Color(41, 128, 185)); // Yetkili Mavisi
+        ustBar.setBackground(new Color(41, 128, 185)); 
         ustBar.setPreferredSize(new Dimension(0, 50));
         
         JLabel lblBaslik = new JLabel("  YÖNETİCİ (ADMİN) PANELİ | Hoş Geldiniz, " + aktifPersonel);
@@ -240,6 +244,38 @@ public class AdminPaneli extends JFrame {
         return pnlMain;
     }
 
+    // ==========================================
+    // AKILLI CİRO AYIKLAYICI (YENİ VE GÜÇLÜ SÜRÜM)
+    // ==========================================
+    private double ciroAyikla(String html) {
+        // 1. YENİ SİSTEM: Fişin içindeki gizli etiketini arar
+        int pStart = html.indexOf("<!--CIRO:");
+        if (pStart != -1) {
+            int pEnd = html.indexOf("-->", pStart);
+            if (pEnd != -1) {
+                try {
+                    String val = html.substring(pStart + 9, pEnd).trim().replace(",", ".");
+                    return Double.parseDouble(val);
+                } catch (Exception e) {}
+            }
+        }
+        
+        // 2. ESKİ SİSTEM: Eğer gizli etiket yoksa "TL" yazısından önceki sayıyı (Genel Toplamı) Regex ile bulur
+        try {
+            Pattern pattern = Pattern.compile("([0-9]+[.,]?[0-9]*)\\s*TL");
+            Matcher matcher = pattern.matcher(html);
+            String sonBulunanTutar = "0.0";
+            
+            // Fişin en altındaki "Toplam" tutarını bulana kadar tarar
+            while (matcher.find()) {
+                sonBulunanTutar = matcher.group(1); 
+            }
+            return Double.parseDouble(sonBulunanTutar.replace(",", "."));
+        } catch (Exception e) {}
+
+        return 0.0;
+    }
+
     private void verileriGuncelle() {
         new Thread(() -> {
             String bugun = new SimpleDateFormat("yyyy-MM-dd").format(new Date());
@@ -255,24 +291,17 @@ public class AdminPaneli extends JFrame {
                     String[] d = s.split("~_~"); 
                     if (d.length >= 5 && d[3].equals("ODENDI")) {
                         gunlukSiparis++;
-                        String html = d[4];
-                        int fBas = html.indexOf("<b>");
-                        if (fBas != -1) {
-                            int fEnd = html.indexOf("</b>", fBas);
-                            if (fEnd != -1) {
-                                try {
-                                    String fiyatStr = html.substring(fBas + 3, fEnd).replace(" TL", "").replace(",", ".").trim();
-                                    gunlukCiro += Double.parseDouble(fiyatStr);
-                                } catch (Exception ignored) {}
-                            }
-                        }
+                        gunlukCiro += ciroAyikla(d[4]); // Kusursuz ayıklayıcı çalışıyor
                     }
                 }
             }
-
+            
             final double fCiro = gunlukCiro;
             final int fSiparis = gunlukSiparis;
-            SwingUtilities.invokeLater(() -> { lblCiro.setText(fCiro + " TL"); lblSiparisSayisi.setText(fSiparis + " Adet"); });
+            SwingUtilities.invokeLater(() -> { 
+                lblCiro.setText(fCiro + " TL"); 
+                lblSiparisSayisi.setText(fSiparis + " Adet"); 
+            });
 
             String aktifMasaCvp = sunucuyaKomutGonderVeCevapAl("AKTIF_MASALARI_GETIR");
             if (aktifMasaCvp != null && aktifMasaCvp.startsWith("AKTIF_MASALAR|")) {
@@ -286,7 +315,7 @@ public class AdminPaneli extends JFrame {
                 SwingUtilities.invokeLater(() -> lblRezervasyon.setText(sayi + " Kayıt"));
             }
         }).start();
-    }   
+    }
 
     private void zRaporlariniYenile() {
         new Thread(() -> {
@@ -311,14 +340,5 @@ public class AdminPaneli extends JFrame {
              BufferedReader in = new BufferedReader(new InputStreamReader(s.getInputStream()))) {
             in.readLine(); out.println(komut); return in.readLine();
         } catch (Exception e) { return null; }
-    }
-
-    private JPanel bosSayfaOlustur(String mesaj) {
-        JPanel p = new JPanel(new BorderLayout());
-        JLabel l = new JLabel(mesaj, SwingConstants.CENTER);
-        l.setFont(new Font("Arial", Font.BOLD, 24));
-        l.setForeground(Color.GRAY);
-        p.add(l, BorderLayout.CENTER);
-        return p;
     }
 }

@@ -567,6 +567,7 @@ public class DatabaseManager {
             if (affected > 0) return "BAŞARILI|Sipariş başarıyla kapatıldı (" + odemeTuru + ").";
             return "HATA|Ödenecek sipariş bulunamadı.";
         } catch (Exception e) { return "HATA|Ödeme alınamadı: " + e.getMessage(); }
+        
     }
 
     public static String mutfakSiparisleriGetir() {
@@ -709,14 +710,20 @@ public class DatabaseManager {
     // ==========================================
     // 8. KURYE / MOTORCU İŞLEMLERİ
     // ==========================================
+// ==========================================
+    // 8. KURYE / MOTORCU İŞLEMLERİ
+    // ==========================================
     public static String kuryeListesiGetir() {
         StringBuilder sb = new StringBuilder("KURYE_LISTESI");
-        String sql = "SELECT FirstName, LastName FROM Kullanicilar WHERE Role = 'Motorcu' OR Role = 'Kurye'";
+        
+        // DÜZELTME: Artık veritabanında 'Motokurye' rolüne sahip olanları da bulacak!
+        String sql = "SELECT FirstName FROM Kullanicilar WHERE Role IN ('Motokurye', 'Motorcu', 'Kurye')";
+        
         try (Connection conn = DriverManager.getConnection(URL); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
             boolean kuryeVarMi = false;
             while (rs.next()) {
                 kuryeVarMi = true;
-                sb.append("|").append(rs.getString("FirstName") + " " + rs.getString("LastName"));
+                sb.append("|").append(rs.getString("FirstName")); // Ad Soyad FirstName sütununda tutuluyor
             }
             if (!kuryeVarMi) return "KURYE_LISTESI|Sistemde Kayıtlı Motorcu Yok";
             return sb.toString();
@@ -799,5 +806,54 @@ public class DatabaseManager {
             pstmt.setString(1, durum); pstmt.setInt(2, id); pstmt.executeUpdate();
             return "BAŞARILI|Rezervasyon güncellendi.";
         } catch (Exception e) { return "HATA|Güncelleme başarısız: " + e.getMessage(); }
+    }
+    // ==========================================
+    // PERSONEL YÖNETİMİ (YENİ ARAYÜZ İÇİN)
+    // ==========================================
+    public static String personelleriGetir() {
+        StringBuilder sb = new StringBuilder("PERSONEL_LISTESI|");
+        String sql = "SELECT UserName, Password, FirstName, Role, Phone, Email, Address FROM Kullanicilar";
+        try (Connection conn = DriverManager.getConnection(URL); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                sb.append(rs.getString("UserName")).append("~_~")
+                  .append(rs.getString("Password")).append("~_~")
+                  .append(rs.getString("FirstName")).append("~_~")
+                  .append(rs.getString("Role")).append("~_~")
+                  .append(rs.getString("Phone") == null ? "" : rs.getString("Phone")).append("~_~")
+                  .append(rs.getString("Email") == null ? "" : rs.getString("Email")).append("~_~")
+                  .append(rs.getString("Address") == null ? "" : rs.getString("Address")).append("|||");
+            }
+            return sb.toString();
+        } catch (Exception e) { return "HATA|Personeller çekilemedi: " + e.getMessage(); }
+    }
+
+    public static String personelEkle(String kAdi, String sifre, String adSoyad, String rol, String tel, String email, String adres) {
+        String sql = "INSERT INTO Kullanicilar (UserName, Password, FirstName, Role, Phone, Email, Address) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        try (Connection conn = DriverManager.getConnection(URL); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, kAdi); pstmt.setString(2, sifre); pstmt.setString(3, adSoyad); pstmt.setString(4, rol);
+            pstmt.setString(5, tel);  pstmt.setString(6, email); pstmt.setString(7, adres);
+            pstmt.executeUpdate();
+            return "BAŞARILI|Yeni personel başarıyla eklendi.";
+        } catch (Exception e) { return "HATA|Bu kullanıcı adı zaten mevcut olabilir!"; }
+    }
+
+    public static String personelGuncelle(String eskiKAdi, String yeniKAdi, String sifre, String adSoyad, String rol, String tel, String email, String adres) {
+        if (eskiKAdi.equalsIgnoreCase("admin") && !yeniKAdi.equalsIgnoreCase("admin")) return "HATA|Admin adı değiştirilemez!";
+        String sql = "UPDATE Kullanicilar SET UserName = ?, Password = ?, FirstName = ?, Role = ?, Phone = ?, Email = ?, Address = ? WHERE UserName = ?";
+        try (Connection conn = DriverManager.getConnection(URL); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, yeniKAdi); pstmt.setString(2, sifre); pstmt.setString(3, adSoyad); pstmt.setString(4, rol);
+            pstmt.setString(5, tel);      pstmt.setString(6, email); pstmt.setString(7, adres); pstmt.setString(8, eskiKAdi);
+            pstmt.executeUpdate();
+            return "BAŞARILI|Personel bilgileri güncellendi.";
+        } catch (Exception e) { return "HATA|Güncelleme başarısız: " + e.getMessage(); }
+    }
+
+    public static String personelSil(String kAdi) {
+        if(kAdi.equalsIgnoreCase("admin")) return "HATA|Ana yönetici hesabı silinemez!"; 
+        String sql = "DELETE FROM Kullanicilar WHERE UserName = ?";
+        try (Connection conn = DriverManager.getConnection(URL); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, kAdi); pstmt.executeUpdate();
+            return "BAŞARILI|Personel sistemden silindi.";
+        } catch (Exception e) { return "HATA|Silme başarısız: " + e.getMessage(); }
     }
 }
