@@ -19,6 +19,7 @@ public class PersonelPaneli extends JFrame {
     private KasaModulu kasaEkrani;
     private RezervasyonModulu rezervasyonEkrani;
     private KuryeModulu kuryeEkrani;
+    private KuryeTakipModulu kuryeTakipEkrani;
 
     public PersonelPaneli(String adSoyad, String rol) {
         this.aktifPersonel = adSoyad;
@@ -43,28 +44,27 @@ public class PersonelPaneli extends JFrame {
         kasaEkrani = new KasaModulu(this);
         rezervasyonEkrani = new RezervasyonModulu(this);
         kuryeEkrani = new KuryeModulu(this, aktifPersonel);
+        kuryeTakipEkrani = new KuryeTakipModulu(this); 
 
         icerikPaneli.add(siparisEkrani, "Masalar ve Sipariş");
         icerikPaneli.add(kasaEkrani, "Kasa Takip");
         icerikPaneli.add(mutfakEkrani, "Mutfak Panosu");
         icerikPaneli.add(rezervasyonEkrani, "Rezervasyonlar");
         icerikPaneli.add(kuryeEkrani, "Kurye Paneli");
+        icerikPaneli.add(kuryeTakipEkrani, "Kurye Takip Paneli"); 
 
         add(icerikPaneli, BorderLayout.CENTER);
 
         // ==========================================
         // ROL TABANLI BAŞLANGIÇ EKRANI YÖNLENDİRMESİ
         // ==========================================
-        if (aktifRol.equalsIgnoreCase("Staff")) {
-            // Mutfak personeli direkt mutfak ekranını görür
+        if (aktifRol.equalsIgnoreCase("Staff") || aktifRol.equalsIgnoreCase("Mutfak")) {
             cardLayout.show(icerikPaneli, "Mutfak Panosu"); 
             mutfakEkrani.verileriYenile(); 
         } else if (aktifRol.equalsIgnoreCase("Motokurye")) {
-            // Kurye personeli direkt kendi teslimat ekranını görür
             cardLayout.show(icerikPaneli, "Kurye Paneli"); 
             kuryeEkrani.verileriYenile();
         } else {
-            // Garson, Kasiyer ve Yetkili(admin) masaları görür
             cardLayout.show(icerikPaneli, "Masalar ve Sipariş");
             siparisEkrani.baslat(); 
         }
@@ -93,7 +93,6 @@ public class PersonelPaneli extends JFrame {
         ustBar.add(btnCikis, BorderLayout.EAST); 
         add(ustBar, BorderLayout.NORTH);
     }
-
     private void solMenuAyarla() {
         JPanel solMenu = new JPanel(); 
         solMenu.setLayout(new BoxLayout(solMenu, BoxLayout.Y_AXIS)); 
@@ -114,11 +113,8 @@ public class PersonelPaneli extends JFrame {
             solMenu.add(Box.createVerticalStrut(10));
             solMenu.add(menuButonuOlustur("Rezervasyonlar", "Rezervasyonlar")); 
             solMenu.add(Box.createVerticalStrut(10));
-            
-            if (aktifRol.equalsIgnoreCase("Yetkili(admin)")) {
-                solMenu.add(menuButonuOlustur("🛵 Kurye Deneme", "Kurye Paneli"));
-                solMenu.add(Box.createVerticalStrut(10));
-            }
+            solMenu.add(menuButonuOlustur("🛵 Kurye Takip Paneli", "Kurye Takip Paneli"));
+            solMenu.add(Box.createVerticalStrut(10));
         } else if (aktifRol.equalsIgnoreCase("Garson")) {
             solMenu.add(menuButonuOlustur("Masalar ve Sipariş", "Masalar ve Sipariş")); 
             solMenu.add(Box.createVerticalStrut(10));
@@ -127,9 +123,10 @@ public class PersonelPaneli extends JFrame {
         } else if (aktifRol.equalsIgnoreCase("Motokurye")) {
             solMenu.add(menuButonuOlustur("🛵 Teslimatlarım", "Kurye Paneli"));
             solMenu.add(Box.createVerticalStrut(10));
-        }
+        } 
         
-        if (aktifRol.equalsIgnoreCase("Staff") || aktifRol.equalsIgnoreCase("Yetkili(admin)")) {
+        // Mutfak / Staff Sadece Mutfak Panosunu Görür!
+        if (aktifRol.equalsIgnoreCase("Staff") || aktifRol.equalsIgnoreCase("Mutfak") || aktifRol.equalsIgnoreCase("Yetkili(admin)")) {
             solMenu.add(menuButonuOlustur("Mutfak Panosu", "Mutfak Panosu"));
         }
         

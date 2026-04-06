@@ -132,6 +132,18 @@ public class KasaModulu extends JPanel {
         btnYolaCikti.addActionListener(e -> {
             if(seciliSiparisId.isEmpty()) return;
             
+            // --- GÜVENLİK KİLİDİ: Sadece HAZIR olanlar yola çıkabilir ---
+            int row = aktifTablo.getSelectedRow();
+            String mevcutDurum = aktifTableModel.getValueAt(row, 3).toString(); // Mevcut Durum sütunu
+            
+            if (!mevcutDurum.equals("HAZIR")) {
+                JOptionPane.showMessageDialog(this, 
+                    "Sipariş henüz mutfakta hazırlanıyor.\nDurum 'HAZIR' olmadan kuryeye atama yapılamaz!", 
+                    "Uyarı", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            // ----------------------------------------------------------
+
             String kuryelerCvp = sunucuyaKomutGonderVeCevapAl("KURYELERI_GETIR");
             if(kuryelerCvp != null && kuryelerCvp.startsWith("KURYE_LISTESI|")) {
                 String[] split = kuryelerCvp.split("\\|");

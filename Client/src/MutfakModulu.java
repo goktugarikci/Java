@@ -1,246 +1,180 @@
+
 import javax.swing.*;
 import java.awt.*;
-
-// Fişleri ve ID'lerini güvenle tutacağımız Özel Sınıf Kapsülü
-class SiparisItem {
-    int orderId; 
-    String htmlData;
-
-    public SiparisItem(int orderId, String htmlData) { 
-        this.orderId = orderId; 
-        this.htmlData = htmlData; 
-    }
-
-    @Override 
-    public String toString() { 
-        return htmlData; 
-    }
-}
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 
 public class MutfakModulu extends JPanel {
-    private DefaultListModel<SiparisItem> modelGecmis = new DefaultListModel<>();
-    private DefaultListModel<SiparisItem> modelBekleyen = new DefaultListModel<>();
-    private DefaultListModel<SiparisItem> modelHazirlanan = new DefaultListModel<>();
-    
-    private JList<SiparisItem> listGecmis;
-    private JList<SiparisItem> listBekleyen;
-    private JList<SiparisItem> listHazirlanan;
     private PersonelPaneli anaPanel;
-
-    private JButton btnTamamla; // Dinamik değişecek buton
+    private JPanel pnlSiparisler;
+    private Timer zamanlayici;
+    private Map<JLabel, String> zamanEtiketleri; // Sipariş zamanlarını takip eder
 
     public MutfakModulu(PersonelPaneli anaPanel) {
-        this.anaPanel = anaPanel; 
-        setLayout(new BorderLayout(15, 15)); 
-        setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
+        this.anaPanel = anaPanel;
+        setLayout(new BorderLayout(15, 15));
+        setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
-        // 3'lü Sütun Yapısı (Geçmiş | Bekleyen | Hazırlanan)
-        JPanel pnlListeler = new JPanel(new GridLayout(1, 3, 15, 0));
-        
-        listGecmis = new JList<>(modelGecmis); 
-        pnlListeler.add(listeOlustur("📜 Geçmiş Siparişler", listGecmis, new Color(245, 245, 245)));
-        
-        listBekleyen = new JList<>(modelBekleyen); 
-        pnlListeler.add(listeOlustur("🔔 Bekleyen Siparişler", listBekleyen, new Color(255, 235, 235)));
-        
-        listHazirlanan = new JList<>(modelHazirlanan); 
-        pnlListeler.add(listeOlustur("🍳 Şu An Hazırlananlar", listHazirlanan, new Color(255, 248, 220)));
-        
-        add(pnlListeler, BorderLayout.CENTER);
+        zamanEtiketleri = new HashMap<>();
 
-        // Alt Butonlar ve Kontroller
-        JPanel pnlButonlar = new JPanel(new GridLayout(1, 3, 15, 10));
+        // --- ÜST BAŞLIK ---
+        JPanel pnlUst = new JPanel(new BorderLayout());
+        JLabel lblBaslik = new JLabel("👨‍🍳 Mutfak Sipariş Panosu");
+        lblBaslik.setFont(new Font("Arial", Font.BOLD, 24));
         
-        JLabel lblBos = new JLabel("<html><center>Geçmiş siparişler salt okunurdur.</center></html>", SwingConstants.CENTER); 
-        lblBos.setForeground(Color.GRAY);
+        JButton btnYenile = new JButton("🔄 Yenile");
+        btnYenile.setBackground(new Color(52, 152, 219));
+        btnYenile.setForeground(Color.WHITE);
+        btnYenile.setFont(new Font("Arial", Font.BOLD, 14));
+        btnYenile.addActionListener(e -> verileriYenile());
         
-        JButton btnHazirla = new JButton("Seçiliyi Hazırlamaya Başla ➔"); 
-        btnHazirla.setBackground(new Color(230, 126, 34)); 
-        btnHazirla.setForeground(Color.WHITE); 
-        btnHazirla.setFont(new Font("Arial", Font.BOLD, 15)); 
-        btnHazirla.setFocusPainted(false); 
-        btnHazirla.setPreferredSize(new Dimension(0, 50));
-        
-        btnTamamla = new JButton("✔ SİPARİŞ HAZIR! (Onayla)"); 
-        btnTamamla.setBackground(new Color(39, 174, 96)); 
-        btnTamamla.setForeground(Color.WHITE); 
-        btnTamamla.setFont(new Font("Arial", Font.BOLD, 15)); 
-        btnTamamla.setFocusPainted(false);
+        pnlUst.add(lblBaslik, BorderLayout.WEST);
+        pnlUst.add(btnYenile, BorderLayout.EAST);
+        add(pnlUst, BorderLayout.NORTH);
 
-        pnlButonlar.add(lblBos); 
-        pnlButonlar.add(btnHazirla); 
-        pnlButonlar.add(btnTamamla); 
+        // --- SİPARİŞLER (KART YAPISI) ---
+        pnlSiparisler = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 15));
+        pnlSiparisler.setBackground(new Color(236, 240, 241));
         
-        add(pnlButonlar, BorderLayout.SOUTH);
+        JScrollPane scrollPane = new JScrollPane(pnlSiparisler);
+        scrollPane.getVerticalScrollBar().setUnitIncrement(16);
+        add(scrollPane, BorderLayout.CENTER);
 
-        // --- AKSİYONLAR VE LİSTENER'LAR ---
-
-        btnHazirla.addActionListener(e -> {
-            durumGuncelle(listBekleyen, "HAZIRLANIYOR", "Bu siparişi 'Hazırlanıyor' aşamasına almak istiyor musunuz?", "Hazırlanıyor Onayı");
-        });
-        
-        // DİNAMİK BUTON YAZISI MOTORU (Mutfak siparişin türünü anlar)
-        listHazirlanan.addListSelectionListener(e -> {
-            SiparisItem secili = listHazirlanan.getSelectedValue();
-            if (secili != null) {
-                if (secili.htmlData.contains("PAKET")) {
-                    btnTamamla.setText("📦 Hazırlandı - Teslime Hazır");
-                } else if (secili.htmlData.contains("EVE SERVİS")) {
-                    btnTamamla.setText("🛵 Hazırlandı - Kurye Ata");
-                } else {
-                    btnTamamla.setText("✔ SİPARİŞ HAZIR! (Masaya Götür)");
-                }
-            } else {
-                btnTamamla.setText("✔ SİPARİŞ HAZIR! (Onayla)");
-            }
-        });
-
-        // DİNAMİK UYARI MESAJI MOTORU (Mutfak onaylarken türüne göre uyarılır)
-        btnTamamla.addActionListener(e -> {
-            SiparisItem seciliItem = listHazirlanan.getSelectedValue();
-            if (seciliItem != null) {
-                String html = seciliItem.htmlData; 
-                String mesaj = "";
-                
-                if (html.contains("EVE SERVİS")) {
-                    mesaj = "🛵 Eve Servis siparişi hazırlandı!\n\nKurye atanması için Kasa departmanına bildirilecek.\nOnaylıyor musunuz?";
-                } else if (html.contains("PAKET")) {
-                    mesaj = "📦 Gel-Al Paket siparişi hazır!\n\nMüşteriye teslim edilmesi için Kasa ekranına uyarı gidecek.\nOnaylıyor musunuz?";
-                } else {
-                    mesaj = "🍽️ Masa siparişi hazır!\n\nGarson ve Kasa ekranlarında masanın rengi SARI olacak.\nOnaylıyor musunuz?";
-                }
-                
-                durumGuncelle(listHazirlanan, "HAZIR", mesaj, "Sipariş Hazır Onayı");
-            } else {
-                JOptionPane.showMessageDialog(this, "Lütfen işlem yapmak istediğiniz siparişi tablodan seçin!", "Uyarı", JOptionPane.WARNING_MESSAGE);
-            }
-        });
-    }
-
-    private JPanel listeOlustur(String baslik, JList<SiparisItem> list, Color bg) {
-        JPanel p = new JPanel(new BorderLayout()); 
-        p.setBorder(BorderFactory.createTitledBorder(
-            BorderFactory.createLineBorder(Color.GRAY, 1, true), 
-            baslik, 
-            javax.swing.border.TitledBorder.LEFT, 
-            javax.swing.border.TitledBorder.TOP, 
-            new Font("Arial", Font.BOLD, 15), 
-            Color.DARK_GRAY
-        ));
-        
-        list.setBackground(bg); 
-        list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION); 
-        list.setCellRenderer(new MutfakListeRenderer(bg));
-        
-        JScrollPane scroll = new JScrollPane(list); 
-        scroll.setBorder(BorderFactory.createEmptyBorder()); 
-        p.add(scroll, BorderLayout.CENTER); 
-        
-        return p;
+        // 1 Saniyelik Canlı Kronometre Başlatıcı
+        zamanlayici = new Timer(1000, e -> zamanlariGuncelle());
+        zamanlayici.start();
     }
 
     public void verileriYenile() {
-        String cevap = anaPanel.sunucuyaKomutGonderVeCevapAl("MUTFAK_SIPARIS_GETIR_FULL");
-        if (cevap != null && cevap.startsWith("MUTFAK_FULL_VERI|")) {
+        new Thread(() -> {
+            String cvp = anaPanel.sunucuyaKomutGonderVeCevapAl("MUTFAK_SIPARIS_GETIR_FULL");
             SwingUtilities.invokeLater(() -> {
-                int seciliBekleyen = listBekleyen.getSelectedIndex(); 
-                int seciliHazirlanan = listHazirlanan.getSelectedIndex();
-                
-                modelGecmis.clear(); 
-                modelBekleyen.clear(); 
-                modelHazirlanan.clear();
-                
-                if (cevap.length() > 17) {
-                    String[] siparisler = cevap.substring(17).split("\\|\\|\\|");
+                pnlSiparisler.removeAll();
+                zamanEtiketleri.clear();
+
+                if (cvp != null && cvp.startsWith("MUTFAK_FULL_VERI|") && cvp.length() > 17) {
+                    String[] siparisler = cvp.substring(17).split("\\|\\|\\|");
                     for (String s : siparisler) {
-                        if (s.trim().isEmpty()) {
-                            continue;
-                        }
+                        if (s.trim().isEmpty()) continue;
+                        String[] d = s.split("~_~", -1);
                         
-                        String[] detay = s.split("~_~"); 
-                        if (detay.length == 4) {
-                            try { 
-                                int id = Integer.parseInt(detay[0]); 
-                                SiparisItem item = new SiparisItem(id, detay[3]);
-                                
-                                switch (detay[2]) { 
-                                    case "BEKLEMEDE": 
-                                        modelBekleyen.addElement(item); 
-                                        break; 
-                                    case "HAZIRLANIYOR": 
-                                        modelHazirlanan.addElement(item); 
-                                        break; 
-                                    case "HAZIR": 
-                                        modelGecmis.addElement(item); 
-                                        break; 
-                                }
-                            } catch (Exception ignored) {}
+                        // Format: OrderID, MasaAdi, Musteri, Urunler, Durum, Tarih
+                        if (d.length >= 6) {
+                            pnlSiparisler.add(siparisKartiOlustur(d[0], d[1], d[2], d[3], d[4], d[5]));
                         }
                     }
-                }
-                
-                if (seciliBekleyen < modelBekleyen.getSize()) {
-                    listBekleyen.setSelectedIndex(seciliBekleyen);
-                }
-                if (seciliHazirlanan < modelHazirlanan.getSize()) {
-                    listHazirlanan.setSelectedIndex(seciliHazirlanan);
-                }
-            });
-        }
-    }
-
-    private void durumGuncelle(JList<SiparisItem> liste, String yeniDurum, String mesaj, String baslik) {
-        SiparisItem seciliItem = liste.getSelectedValue();
-        if (seciliItem != null) {
-            int secim = JOptionPane.showConfirmDialog(this, mesaj, baslik, JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
-            
-            if (secim == JOptionPane.YES_OPTION) {
-                String cvp = anaPanel.sunucuyaKomutGonderVeCevapAl("SIPARIS_DURUM_GUNCELLE|" + seciliItem.orderId + "|" + yeniDurum);
-                
-                if (cvp != null && cvp.startsWith("BAŞARILI")) {
-                    verileriYenile();
                 } else {
-                    JOptionPane.showMessageDialog(this, "Güncelleme başarısız: " + cvp, "Hata", JOptionPane.ERROR_MESSAGE);
+                    JLabel lblBos = new JLabel("Mutfakta bekleyen aktif sipariş yok.");
+                    lblBos.setFont(new Font("Arial", Font.ITALIC, 18));
+                    pnlSiparisler.add(lblBos);
                 }
-            }
-        } else {
-            JOptionPane.showMessageDialog(this, "Lütfen sipariş seçin!", "Uyarı", JOptionPane.WARNING_MESSAGE);
-        }
+                pnlSiparisler.revalidate();
+                pnlSiparisler.repaint();
+            });
+        }).start();
     }
 
-    // TASARIM MOTORU
-    class MutfakListeRenderer extends DefaultListCellRenderer {
-        private Color normalBg; 
-        private Color selectedBg = new Color(173, 216, 230); // Soft Açık Mavi
+    private JPanel siparisKartiOlustur(String id, String masa, String musteri, String urunler, String durum, String tarih) {
+        JPanel kart = new JPanel(new BorderLayout(5, 5));
+        kart.setPreferredSize(new Dimension(320, 280));
+        kart.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(Color.GRAY, 2, true),
+            BorderFactory.createEmptyBorder(10, 10, 10, 10)
+        ));
+
+        // Duruma göre arkaplan rengi
+        if (durum.equals("YENI")) kart.setBackground(new Color(253, 235, 208)); // Açık turuncu
+        else if (durum.equals("HAZIRLANIYOR")) kart.setBackground(new Color(212, 230, 241)); // Açık mavi
+        else kart.setBackground(new Color(208, 236, 231)); // Açık yeşil
+
+        // --- ÜST: Sipariş No ve Canlı Zaman ---
+        JPanel pnlUst = new JPanel(new BorderLayout());
+        pnlUst.setOpaque(false);
         
-        public MutfakListeRenderer(Color normalBg) { 
-            this.normalBg = normalBg; 
-        }
+        JLabel lblId = new JLabel("Sipariş No: #" + id);
+        lblId.setFont(new Font("Arial", Font.BOLD, 14));
         
-        @Override 
-        public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
-            SiparisItem item = (SiparisItem) value; 
-            String htmlText = item.htmlData;
-            
-            if (htmlText != null && htmlText.startsWith("<html>")) {
-                htmlText = "<html><div style='padding: 10px; font-family: sans-serif; font-size: 13px;'>" + htmlText.substring(6) + "</div></html>";
+        JLabel lblZaman = new JLabel("00:00:00");
+        lblZaman.setFont(new Font("Arial", Font.BOLD, 15));
+        lblZaman.setForeground(new Color(192, 57, 43)); // Kırmızı Kronometre
+        zamanEtiketleri.put(lblZaman, tarih); // Tıklayan zamanlayıcıya kaydet
+        
+        pnlUst.add(lblId, BorderLayout.WEST);
+        pnlUst.add(lblZaman, BorderLayout.EAST);
+        kart.add(pnlUst, BorderLayout.NORTH);
+
+        // --- ORTA: Müşteri Adı ve İçerik Listesi ---
+        JPanel pnlOrta = new JPanel(new BorderLayout(0, 5));
+        pnlOrta.setOpaque(false);
+        
+        JLabel lblMusteri = new JLabel("👤 " + musteri + " (" + masa + ")");
+        lblMusteri.setFont(new Font("Arial", Font.BOLD, 15));
+        lblMusteri.setForeground(Color.BLUE);
+        pnlOrta.add(lblMusteri, BorderLayout.NORTH);
+
+        // İçerikleri alt alta yazdır (Virgülleri alt satıra çevir)
+        String temizUrunler = urunler.replace(",", "\n• ");
+        if(!temizUrunler.startsWith("•")) temizUrunler = "• " + temizUrunler;
+        
+        JTextArea txtUrunler = new JTextArea(temizUrunler);
+        txtUrunler.setEditable(false);
+        txtUrunler.setOpaque(false);
+        txtUrunler.setFont(new Font("Arial", Font.PLAIN, 15));
+        pnlOrta.add(new JScrollPane(txtUrunler), BorderLayout.CENTER);
+        
+        kart.add(pnlOrta, BorderLayout.CENTER);
+
+        // --- ALT: İşlem Butonları ---
+        JPanel pnlAlt = new JPanel(new GridLayout(1, 2, 5, 0));
+        pnlAlt.setOpaque(false);
+        
+        JButton btnHazirlaniyor = new JButton("Hazırlanıyor");
+        btnHazirlaniyor.setBackground(new Color(41, 128, 185)); btnHazirlaniyor.setForeground(Color.WHITE);
+        btnHazirlaniyor.setEnabled(!durum.equals("HAZIRLANIYOR") && !durum.equals("HAZIR"));
+        btnHazirlaniyor.addActionListener(e -> durumDegistir(id, "HAZIRLANIYOR"));
+
+        JButton btnHazir = new JButton("Hazır");
+        btnHazir.setBackground(new Color(39, 174, 96)); btnHazir.setForeground(Color.WHITE);
+        btnHazir.setEnabled(!durum.equals("HAZIR"));
+        btnHazir.addActionListener(e -> durumDegistir(id, "HAZIR"));
+
+        pnlAlt.add(btnHazirlaniyor);
+        pnlAlt.add(btnHazir);
+        kart.add(pnlAlt, BorderLayout.SOUTH);
+
+        return kart;
+    }
+
+    private void durumDegistir(String id, String yeniDurum) {
+        new Thread(() -> {
+            anaPanel.sunucuyaKomutGonderVeCevapAl("SIPARIS_DURUM_GUNCELLE|" + id + "|" + yeniDurum);
+            SwingUtilities.invokeLater(() -> verileriYenile());
+        }).start();
+    }
+
+    // Kronometreyi her 1 saniyede bir tetikleyen arka plan metodu
+    private void zamanlariGuncelle() {
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        Date suan = new Date();
+        
+        for (Map.Entry<JLabel, String> entry : zamanEtiketleri.entrySet()) {
+            try {
+                Date siparisZamani = sdf.parse(entry.getValue());
+                long farkMs = suan.getTime() - siparisZamani.getTime();
+                
+                if(farkMs < 0) farkMs = 0;
+
+                long saniye = (farkMs / 1000) % 60;
+                long dakika = (farkMs / (1000 * 60)) % 60;
+                long saat = (farkMs / (1000 * 60 * 60)) % 24;
+
+                String formatliZaman = String.format("%02d:%02d:%02d", saat, dakika, saniye);
+                entry.getKey().setText("⌛ " + formatliZaman);
+            } catch (Exception e) {
+                entry.getKey().setText("⌛ Bekliyor..");
             }
-            
-            JLabel label = (JLabel) super.getListCellRendererComponent(list, htmlText, index, isSelected, cellHasFocus);
-            
-            if (isSelected) {
-                label.setBackground(selectedBg); 
-            } else {
-                label.setBackground(normalBg); 
-            }
-            
-            label.setForeground(Color.BLACK); 
-            label.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(0, 0, 3, 0, Color.GRAY), 
-                BorderFactory.createEmptyBorder(2, 2, 2, 2)
-            ));
-            
-            return label;
         }
     }
 }

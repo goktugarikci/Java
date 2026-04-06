@@ -6,102 +6,113 @@ import java.awt.*;
 public class KuryeModulu extends JPanel {
     private PersonelPaneli anaPanel;
     private String kuryeAdi;
-    
-    private DefaultTableModel tabloModel;
+    private DefaultTableModel model;
     private JTable tablo;
-    private JEditorPane txtFisDetay;
-    private String seciliSiparisId = "";
+    private JEditorPane txtDetay;
+    private String seciliOrderId = "";
 
     public KuryeModulu(PersonelPaneli anaPanel, String kuryeAdi) {
         this.anaPanel = anaPanel;
         this.kuryeAdi = kuryeAdi;
-        setLayout(new BorderLayout(15, 15));
-        setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        setLayout(new BorderLayout(10, 10));
+        setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-        splitPane.setDividerLocation(600);
+        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+        split.setDividerLocation(450);
 
-        // SOL TARAF: TESLİMATLAR
-        JPanel pnlSol = new JPanel(new BorderLayout());
-        pnlSol.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.GRAY), "🛵 Bana Atanan Teslimatlar"));
-
-        tabloModel = new DefaultTableModel(new String[]{"Sipariş No", "Müşteri Adı", "Durum"}, 0) {
+        // SOL: SİPARİŞ LİSTESİ
+        model = new DefaultTableModel(new String[]{"Sipariş No", "Müşteri Adı", "Durum"}, 0) {
             @Override public boolean isCellEditable(int row, int column) { return false; }
         };
-        tablo = new JTable(tabloModel); tablo.setRowHeight(35); tablo.setFont(new Font("Arial", Font.PLAIN, 14));
-        tablo.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        tablo = new JTable(model);
+        tablo.setRowHeight(35);
+        
+        JPanel pnlSol = new JPanel(new BorderLayout(5,5));
+        pnlSol.add(new JLabel("🏍️ Bana Atanan Teslimatlar"), BorderLayout.NORTH);
         pnlSol.add(new JScrollPane(tablo), BorderLayout.CENTER);
-
+        
         JButton btnYenile = new JButton("🔄 Listeyi Yenile");
-        btnYenile.setBackground(new Color(52, 152, 219)); btnYenile.setForeground(Color.WHITE);
         btnYenile.addActionListener(e -> verileriYenile());
         pnlSol.add(btnYenile, BorderLayout.SOUTH);
+        split.setLeftComponent(pnlSol);
 
-        splitPane.setLeftComponent(pnlSol);
-
-        // SAĞ TARAF: FİŞ VE ÖDEME ALMA
+        // SAĞ: DETAY VE BUTONLAR
         JPanel pnlSag = new JPanel(new BorderLayout(10, 10));
-        pnlSag.setBorder(BorderFactory.createTitledBorder("Müşteri Adresi ve Fiş Detayı"));
+        txtDetay = new JEditorPane();
+        txtDetay.setContentType("text/html");
+        txtDetay.setEditable(false);
+        pnlSag.add(new JScrollPane(txtDetay), BorderLayout.CENTER);
 
-        txtFisDetay = new JEditorPane(); txtFisDetay.setContentType("text/html"); txtFisDetay.setEditable(false);
-        pnlSag.add(new JScrollPane(txtFisDetay), BorderLayout.CENTER);
+        JPanel pnlAlt = new JPanel(new GridLayout(1, 3, 5, 5));
+        JButton btnNakit = new JButton("✅ Nakit Tahsil Edildi");
+        btnNakit.setBackground(new Color(39, 174, 96)); btnNakit.setForeground(Color.WHITE);
+        
+        JButton btnKart = new JButton("💳 K.Kartı Tahsil Edildi");
+        btnKart.setBackground(new Color(41, 128, 185)); btnKart.setForeground(Color.WHITE);
+        
+        JButton btnHata = new JButton("❌ Teslim Edilemedi");
+        btnHata.setBackground(new Color(192, 57, 43)); btnHata.setForeground(Color.WHITE);
 
-        JPanel pnlButonlar = new JPanel(new GridLayout(1, 3, 10, 10));
-        JButton btnNakit = new JButton("💵 Nakit Tahsil Edildi"); btnNakit.setBackground(new Color(39, 174, 96)); btnNakit.setForeground(Color.WHITE);
-        JButton btnKart = new JButton("💳 K.Kartı Tahsil Edildi"); btnKart.setBackground(new Color(41, 128, 185)); btnKart.setForeground(Color.WHITE);
-        JButton btnIptal = new JButton("❌ Teslim Edilemedi"); btnIptal.setBackground(new Color(192, 57, 43)); btnIptal.setForeground(Color.WHITE);
+        pnlAlt.add(btnNakit); pnlAlt.add(btnKart); pnlAlt.add(btnHata);
+        pnlSag.add(pnlAlt, BorderLayout.SOUTH);
+        split.setRightComponent(pnlSag);
 
-        pnlButonlar.add(btnNakit); pnlButonlar.add(btnKart); pnlButonlar.add(btnIptal);
-        pnlSag.add(pnlButonlar, BorderLayout.SOUTH);
+        add(split, BorderLayout.CENTER);
 
-        splitPane.setRightComponent(pnlSag);
-        add(splitPane, BorderLayout.CENTER);
-
-        // Tıklama Olayı
+        // --- OLAYLAR ---
         tablo.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting() && tablo.getSelectedRow() != -1) {
-                seciliSiparisId = tabloModel.getValueAt(tablo.getSelectedRow(), 0).toString();
-                // 3. kolonda (gizli) HTML var
-                txtFisDetay.setText("<div style='font-family: Arial; padding: 10px;'>" + tabloModel.getValueAt(tablo.getSelectedRow(), 3).toString() + "</div>");
+                seciliOrderId = model.getValueAt(tablo.getSelectedRow(), 0).toString();
+                String html = (String) tablo.getClientProperty("html_" + seciliOrderId);
+                txtDetay.setText(html);
             }
         });
 
-        btnNakit.addActionListener(e -> odemeAl("Nakit"));
-        btnKart.addActionListener(e -> odemeAl("Kredi Kartı"));
-        btnIptal.addActionListener(e -> iptalEt());
+        // Teslimat Onay Butonları
+        btnNakit.addActionListener(e -> teslimatKapat("Nakit"));
+        btnKart.addActionListener(e -> teslimatKapat("Kredi Kartı"));
+        btnHata.addActionListener(e -> teslimatKapat("HATA_İPTAL"));
+    }
+
+    private void teslimatKapat(String tur) {
+        if (seciliOrderId.isEmpty()) return;
+        
+        String onayMesaji = tur.equals("HATA_İPTAL") ? "Teslim edilemedi olarak işaretlensin mi?" : "Ödeme alındı ve teslim edildi olarak işaretlensin mi?";
+        if (JOptionPane.showConfirmDialog(this, onayMesaji, "Onay", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) {
+            
+            String komut;
+            if (tur.equals("HATA_İPTAL")) {
+                komut = "SIPARIS_DURUM_GUNCELLE|" + seciliOrderId + "|IPTAL";
+            } else {
+                // Sunucuda bu komut siparişi ödenmiş ve teslim edilmiş yapar
+                komut = "SIPARIS_ODEME_AL|" + seciliOrderId + "|" + tur;
+            }
+            
+            String cvp = anaPanel.sunucuyaKomutGonderVeCevapAl(komut);
+            JOptionPane.showMessageDialog(this, cvp);
+            
+            seciliOrderId = "";
+            txtDetay.setText("");
+            verileriYenile();
+        }
     }
 
     public void verileriYenile() {
         new Thread(() -> {
-            String cevap = anaPanel.sunucuyaKomutGonderVeCevapAl("KURYE_SIPARISLERI_GETIR|" + kuryeAdi);
+            String cvp = anaPanel.sunucuyaKomutGonderVeCevapAl("KURYE_SIPARISLERI_GETIR|" + kuryeAdi);
             SwingUtilities.invokeLater(() -> {
-                tabloModel.setColumnCount(3); tabloModel.setRowCount(0); tabloModel.addColumn("HTML_GIZLI"); 
-                if (cevap != null && cevap.startsWith("KURYE_SIPARISLERI|") && cevap.length() > 18) {
-                    String[] siparisler = cevap.substring(18).split("\\|\\|\\|");
+                model.setRowCount(0);
+                if (cvp != null && cvp.startsWith("KURYE_VERI|") && cvp.length() > 11) {
+                    String[] siparisler = cvp.substring(11).split("\\|\\|\\|");
                     for (String s : siparisler) {
-                        if (s.trim().isEmpty()) continue; String[] d = s.split("~_~"); 
-                        if (d.length >= 4) tabloModel.addRow(new Object[]{d[0], d[1], d[2], d[3]});
+                        String[] d = s.split("~_~");
+                        if (d.length >= 4) {
+                            model.addRow(new Object[]{d[0], d[1], d[2]});
+                            tablo.putClientProperty("html_" + d[0], d[3]);
+                        }
                     }
                 }
-                tablo.getColumnModel().getColumn(3).setMinWidth(0); tablo.getColumnModel().getColumn(3).setMaxWidth(0); tablo.getColumnModel().getColumn(3).setWidth(0);
-                txtFisDetay.setText(""); seciliSiparisId = "";
             });
         }).start();
-    }
-
-    private void odemeAl(String tur) {
-        if(seciliSiparisId.isEmpty()) return;
-        if (JOptionPane.showConfirmDialog(this, "Paketi teslim edip " + tur + " ödeme aldığınızı onaylıyor musunuz?", "Ödeme Onayı", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) {
-            JOptionPane.showMessageDialog(this, anaPanel.sunucuyaKomutGonderVeCevapAl("SIPARIS_ODEME_AL|" + seciliSiparisId + "|" + tur));
-            verileriYenile();
-        }
-    }
-
-    private void iptalEt() {
-        if(seciliSiparisId.isEmpty()) return;
-        if (JOptionPane.showConfirmDialog(this, "Siparişi teslim edilemedi/iptal olarak işaretliyorsunuz. Emin misiniz?", "İptal Onayı", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) {
-            JOptionPane.showMessageDialog(this, anaPanel.sunucuyaKomutGonderVeCevapAl("SIPARIS_DURUM_GUNCELLE|" + seciliSiparisId + "|IPTAL"));
-            verileriYenile();
-        }
     }
 }
