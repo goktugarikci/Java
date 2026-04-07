@@ -1,50 +1,121 @@
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class MutfakModulu extends JPanel {
     private PersonelPaneli anaPanel;
     private JPanel pnlSiparisler;
     private Timer zamanlayici;
-    private Map<JLabel, String> zamanEtiketleri; // Sipariş zamanlarını takip eder
+    private Timer otoYenileme;
+    private Map<JLabel, String> zamanEtiketleri;
+    private Set<String> bilinenSiparisler;
+    private boolean uyariEkraniAcik = false; 
+    private String aktifSekme = "AKTIF"; 
+    
+    // Üst Sekme Butonları
+    private JButton btnAktif;
+    private JButton btnGecmis;
 
     public MutfakModulu(PersonelPaneli anaPanel) {
         this.anaPanel = anaPanel;
-        setLayout(new BorderLayout(15, 15));
-        setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        setLayout(new BorderLayout()); 
+        setBackground(new Color(236, 240, 241)); 
 
         zamanEtiketleri = new HashMap<>();
+        bilinenSiparisler = new HashSet<>();
 
-        // --- ÜST BAŞLIK ---
-        JPanel pnlUst = new JPanel(new BorderLayout());
-        JLabel lblBaslik = new JLabel("👨‍🍳 Mutfak Sipariş Panosu");
-        lblBaslik.setFont(new Font("Arial", Font.BOLD, 24));
-        
-        JButton btnYenile = new JButton("🔄 Yenile");
-        btnYenile.setBackground(new Color(52, 152, 219));
-        btnYenile.setForeground(Color.WHITE);
-        btnYenile.setFont(new Font("Arial", Font.BOLD, 14));
-        btnYenile.addActionListener(e -> verileriYenile());
-        
-        pnlUst.add(lblBaslik, BorderLayout.WEST);
-        pnlUst.add(btnYenile, BorderLayout.EAST);
-        add(pnlUst, BorderLayout.NORTH);
+        // ==========================================
+        // 1. ÜST NAVİGASYON BARI
+        // ==========================================
+        JPanel pnlUstBar = new JPanel(new BorderLayout());
+        pnlUstBar.setBackground(new Color(44, 62, 80)); 
+        pnlUstBar.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
 
-        // --- SİPARİŞLER (KART YAPISI) ---
-        pnlSiparisler = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 15));
-        pnlSiparisler.setBackground(new Color(236, 240, 241));
+        JPanel pnlSekmeler = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 0));
+        pnlSekmeler.setOpaque(false);
+
+        btnAktif = new JButton("🍽️ Aktif Siparişler");
+        btnAktif.setFont(new Font("Arial", Font.BOLD, 15));
+        btnAktif.setForeground(Color.WHITE);
+        btnAktif.setFocusPainted(false);
+        btnAktif.setPreferredSize(new Dimension(180, 40));
+
+        btnGecmis = new JButton("🗄️ Geçmiş Siparişler");
+        btnGecmis.setFont(new Font("Arial", Font.BOLD, 15));
+        btnGecmis.setForeground(Color.WHITE);
+        btnGecmis.setFocusPainted(false);
+        btnGecmis.setPreferredSize(new Dimension(200, 40));
+
+        sekmeGorselGuncelle();
+
+        btnAktif.addActionListener(e -> { 
+            aktifSekme = "AKTIF"; 
+            sekmeGorselGuncelle();
+            verileriYenile(); 
+        });
+        
+        btnGecmis.addActionListener(e -> { 
+            aktifSekme = "GECMIS"; 
+            sekmeGorselGuncelle();
+            verileriYenile(); 
+        });
+
+        pnlSekmeler.add(btnAktif);
+        pnlSekmeler.add(btnGecmis);
+
+        JButton btnManuelYenile = new JButton("🔄 Sayfayı Yenile");
+        btnManuelYenile.setFont(new Font("Arial", Font.BOLD, 14));
+        btnManuelYenile.setBackground(new Color(52, 152, 219));
+        btnManuelYenile.setForeground(Color.WHITE);
+        btnManuelYenile.setFocusPainted(false);
+        btnManuelYenile.addActionListener(e -> verileriYenile());
+
+        pnlUstBar.add(pnlSekmeler, BorderLayout.WEST);
+        pnlUstBar.add(btnManuelYenile, BorderLayout.EAST);
+
+        add(pnlUstBar, BorderLayout.NORTH);
+
+        // ==========================================
+        // 2. İÇERİK ALANI
+        // ==========================================
+        pnlSiparisler = new JPanel();
+        pnlSiparisler.setLayout(new BoxLayout(pnlSiparisler, BoxLayout.Y_AXIS));
+        pnlSiparisler.setBackground(new Color(236, 240, 241)); 
+        pnlSiparisler.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
         
         JScrollPane scrollPane = new JScrollPane(pnlSiparisler);
         scrollPane.getVerticalScrollBar().setUnitIncrement(16);
+        scrollPane.setBorder(null);
+        
         add(scrollPane, BorderLayout.CENTER);
 
-        // 1 Saniyelik Canlı Kronometre Başlatıcı
         zamanlayici = new Timer(1000, e -> zamanlariGuncelle());
         zamanlayici.start();
+        
+        otoYenileme = new Timer(5000, e -> {
+            if (!uyariEkraniAcik) verileriYenile();
+        });
+        otoYenileme.start();
+    }
+
+    private void sekmeGorselGuncelle() {
+        if(aktifSekme.equals("AKTIF")) {
+            btnAktif.setBackground(new Color(46, 204, 113)); 
+            btnGecmis.setBackground(new Color(52, 73, 94)); 
+        } else {
+            btnAktif.setBackground(new Color(52, 73, 94)); 
+            btnGecmis.setBackground(new Color(255, 152, 0)); 
+        }
     }
 
     public void verileriYenile() {
@@ -54,126 +125,222 @@ public class MutfakModulu extends JPanel {
                 pnlSiparisler.removeAll();
                 zamanEtiketleri.clear();
 
-                if (cvp != null && cvp.startsWith("MUTFAK_FULL_VERI|") && cvp.length() > 17) {
-                    String[] siparisler = cvp.substring(17).split("\\|\\|\\|");
-                    for (String s : siparisler) {
-                        if (s.trim().isEmpty()) continue;
-                        String[] d = s.split("~_~", -1);
-                        
-                        // Format: OrderID, MasaAdi, Musteri, Urunler, Durum, Tarih
-                        if (d.length >= 6) {
-                            pnlSiparisler.add(siparisKartiOlustur(d[0], d[1], d[2], d[3], d[4], d[5]));
+                if (cvp != null && cvp.startsWith("MUTFAK_FULL_VERI|")) {
+                    if (!cvp.equals("MUTFAK_FULL_VERI|BOS")) {
+                        String[] siparisler = cvp.substring(17).split("\\|\\|\\|");
+                        Set<String> guncelIdler = new HashSet<>();
+                        boolean yeniSiparisVar = false;
+
+                        for (String s : siparisler) {
+                            if (s.trim().isEmpty()) continue;
+                            String[] d = s.split("~_~", -1);
+                            if (d.length >= 6) {
+                                String id = d[0];
+                                String durum = d[4];
+                                guncelIdler.add(id);
+                                
+                                if (!bilinenSiparisler.contains(id) && (durum.equals("YENI") || durum.equals("BEKLEMEDE"))) {
+                                    yeniSiparisVar = true;
+                                }
+
+                                boolean isGecmis = durum.equals("HAZIR");
+                                
+                                if (aktifSekme.equals("AKTIF") && !isGecmis) {
+                                    pnlSiparisler.add(siparisKartiOlustur(id, d[1], d[2], d[3], durum, d[5]));
+                                    pnlSiparisler.add(Box.createVerticalStrut(15)); 
+                                } else if (aktifSekme.equals("GECMIS") && isGecmis) {
+                                    pnlSiparisler.add(siparisKartiOlustur(id, d[1], d[2], d[3], durum, d[5]));
+                                    pnlSiparisler.add(Box.createVerticalStrut(15)); 
+                                }
+                            }
                         }
+
+                        if (yeniSiparisVar && !bilinenSiparisler.isEmpty() && !uyariEkraniAcik) {
+                            yeniSiparisBildirimi();
+                        }
+                        bilinenSiparisler = guncelIdler;
+
+                    } else {
+                        bilinenSiparisler.clear();
+                        gosterBosMesaj("Bu sekmede gösterilecek sipariş bulunamadı.");
                     }
                 } else {
-                    JLabel lblBos = new JLabel("Mutfakta bekleyen aktif sipariş yok.");
-                    lblBos.setFont(new Font("Arial", Font.ITALIC, 18));
-                    pnlSiparisler.add(lblBos);
+                    gosterBosMesaj("<html><font color='red'>Sunucuya Bağlanılamadı!</font></html>");
                 }
+                
                 pnlSiparisler.revalidate();
                 pnlSiparisler.repaint();
             });
         }).start();
     }
 
-    private JPanel siparisKartiOlustur(String id, String masa, String musteri, String urunler, String durum, String tarih) {
-        JPanel kart = new JPanel(new BorderLayout(5, 5));
-        kart.setPreferredSize(new Dimension(320, 280));
+    private void gosterBosMesaj(String msj) {
+        JLabel lblBos = new JLabel(msj);
+        lblBos.setFont(new Font("Arial", Font.BOLD, 18));
+        lblBos.setForeground(Color.DARK_GRAY);
+        pnlSiparisler.add(lblBos);
+    }
+
+    private void yeniSiparisBildirimi() {
+        uyariEkraniAcik = true;
+        Toolkit.getDefaultToolkit().beep(); 
+        
+        new Thread(() -> {
+            JOptionPane.showOptionDialog(this, "Mutfak panosuna yeni bir sipariş düştü!", "🔔 YENİ SİPARİŞ",
+                JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE, null, 
+                new Object[]{"Siparişi Gördüm"}, "Siparişi Gördüm");
+            
+            uyariEkraniAcik = false; 
+            verileriYenile(); 
+        }).start();
+    }
+
+    // ==========================================
+    // 3. TASARIMDAKİ YATAY KART DİZİLİMİ
+    // ==========================================
+    private JPanel siparisKartiOlustur(String id, String masa, String musteri, String html, String durum, String tarih) {
+        JPanel kart = new JPanel(new BorderLayout(15, 10));
+        kart.setMaximumSize(new Dimension(Integer.MAX_VALUE, 150)); 
+        kart.setMinimumSize(new Dimension(600, 150));
+        
         kart.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(Color.GRAY, 2, true),
-            BorderFactory.createEmptyBorder(10, 10, 10, 10)
+            BorderFactory.createLineBorder(Color.GRAY, 1, true),
+            BorderFactory.createEmptyBorder(10, 15, 10, 15) 
         ));
 
-        // Duruma göre arkaplan rengi
-        if (durum.equals("YENI")) kart.setBackground(new Color(253, 235, 208)); // Açık turuncu
-        else if (durum.equals("HAZIRLANIYOR")) kart.setBackground(new Color(212, 230, 241)); // Açık mavi
-        else kart.setBackground(new Color(208, 236, 231)); // Açık yeşil
+        if (durum.equals("YENI") || durum.equals("BEKLEMEDE")) {
+            kart.setBackground(new Color(255, 235, 153)); 
+        } else if (durum.equals("HAZIRLANIYOR")) {
+            kart.setBackground(new Color(173, 235, 173)); 
+        } else {
+            kart.setBackground(new Color(220, 220, 220)); 
+        }
 
-        // --- ÜST: Sipariş No ve Canlı Zaman ---
-        JPanel pnlUst = new JPanel(new BorderLayout());
-        pnlUst.setOpaque(false);
+        // ==========================================
+        // İSİM BULAMAMA HATASINI ÇÖZEN YENİ MOTOR
+        // ==========================================
+        String siparisiAlan = "Bilinmiyor";
+        String temizUrunler = html;
         
-        JLabel lblId = new JLabel("Sipariş No: #" + id);
-        lblId.setFont(new Font("Arial", Font.BOLD, 14));
-        
-        JLabel lblZaman = new JLabel("00:00:00");
-        lblZaman.setFont(new Font("Arial", Font.BOLD, 15));
-        lblZaman.setForeground(new Color(192, 57, 43)); // Kırmızı Kronometre
-        zamanEtiketleri.put(lblZaman, tarih); // Tıklayan zamanlayıcıya kaydet
-        
-        pnlUst.add(lblId, BorderLayout.WEST);
-        pnlUst.add(lblZaman, BorderLayout.EAST);
-        kart.add(pnlUst, BorderLayout.NORTH);
+        try {
+            // HTML etiketlerini geçici olarak silip "saf metin" elde ediyoruz ki kelime ararken takılmasın
+            String safMetin = html.replace("<br>", "\n").replaceAll("<[^>]+>", " ");
 
-        // --- ORTA: Müşteri Adı ve İçerik Listesi ---
-        JPanel pnlOrta = new JPanel(new BorderLayout(0, 5));
-        pnlOrta.setOpaque(false);
-        
-        JLabel lblMusteri = new JLabel("👤 " + musteri + " (" + masa + ")");
-        lblMusteri.setFont(new Font("Arial", Font.BOLD, 15));
-        lblMusteri.setForeground(Color.BLUE);
-        pnlOrta.add(lblMusteri, BorderLayout.NORTH);
+            Matcher mMus = Pattern.compile("Müşteri:\\s*([^\\n]+)").matcher(safMetin);
+            if (mMus.find() && !mMus.group(1).trim().isEmpty()) musteri = mMus.group(1).trim();
+            
+            Matcher mAla = Pattern.compile("Siparişi Alan:\\s*([^\\n]+)").matcher(safMetin);
+            if (mAla.find() && !mAla.group(1).trim().isEmpty()) siparisiAlan = mAla.group(1).trim();
+            
+            Matcher mMas = Pattern.compile("(?i)(YENİ MASA|MASA|EVE SERVİS|PAKET|GEL-AL)[\\s\\(]*([^\\n\\)]*)").matcher(safMetin);
+            if (mMas.find()) {
+                masa = mMas.group(1).trim();
+                String detay = mMas.group(2).trim();
+                if (!detay.isEmpty() && !masa.contains(detay)) masa += " (" + detay + ")";
+            }
 
-        // İçerikleri alt alta yazdır (Virgülleri alt satıra çevir)
-        String temizUrunler = urunler.replace(",", "\n• ");
-        if(!temizUrunler.startsWith("•")) temizUrunler = "• " + temizUrunler;
+            // Sipariş ürünlerinin olduğu kısmı temizleme
+            temizUrunler = temizUrunler.replaceAll("(?i)(<[^>]+>)?\\[\\d{2}:\\d{2}\\].*?(?:<br>|\\n)", "");
+            temizUrunler = temizUrunler.replaceAll("(?i)(<[^>]+>)?(Siparişi Alan:|Müşteri:|Tarih:|Adres:|Not:).*?(?:<br>|\\n)", "");
+            
+            String fiyatEtiketi = "<!" + "--PRICE"; 
+            int fiyatIdx = temizUrunler.indexOf(fiyatEtiketi);
+            if(fiyatIdx != -1) {
+                temizUrunler = temizUrunler.substring(0, fiyatIdx);
+            }
+            
+            temizUrunler = temizUrunler.replace("<hr>", "").replaceAll("(-{3,})", ""); 
+            temizUrunler = temizUrunler.replace("<br><br>", "<br>").trim();
+            if (temizUrunler.startsWith("<br>")) temizUrunler = temizUrunler.substring(4).trim();
+        } catch (Exception e) {
+            temizUrunler = "İçerik Yüklenemedi.";
+        }
+
+        // KARTIN SOL KISMI
+        JPanel pnlSolBilgi = new JPanel(new BorderLayout(0, 5));
+        pnlSolBilgi.setOpaque(false);
         
-        JTextArea txtUrunler = new JTextArea(temizUrunler);
+        JPanel pnlMusteriDetay = new JPanel(new GridLayout(2, 1));
+        pnlMusteriDetay.setOpaque(false);
+        pnlMusteriDetay.add(new JLabel("<html><font size='4'><b>Müşteri:</b> " + musteri + "</font></html>"));
+        pnlMusteriDetay.add(new JLabel("<html><font size='4'><b>Siparişi Alan:</b> " + siparisiAlan + "</font></html>"));
+        pnlSolBilgi.add(pnlMusteriDetay, BorderLayout.NORTH);
+        
+        JPanel pnlIcerikWrapper = new JPanel(new BorderLayout());
+        pnlIcerikWrapper.setOpaque(false);
+        pnlIcerikWrapper.add(new JLabel("<html><font size='4'><b>Sipariş İçeriği:</b></font></html>"), BorderLayout.NORTH);
+        
+        JEditorPane txtUrunler = new JEditorPane("text/html", icerikRenklendir(temizUrunler));
         txtUrunler.setEditable(false);
         txtUrunler.setOpaque(false);
-        txtUrunler.setFont(new Font("Arial", Font.PLAIN, 15));
-        pnlOrta.add(new JScrollPane(txtUrunler), BorderLayout.CENTER);
+        pnlIcerikWrapper.add(new JScrollPane(txtUrunler), BorderLayout.CENTER);
         
-        kart.add(pnlOrta, BorderLayout.CENTER);
+        pnlSolBilgi.add(pnlIcerikWrapper, BorderLayout.CENTER);
 
-        // --- ALT: İşlem Butonları ---
-        JPanel pnlAlt = new JPanel(new GridLayout(1, 2, 5, 0));
-        pnlAlt.setOpaque(false);
+        // KARTIN SAĞ KISMI
+        JPanel pnlSagBilgi = new JPanel(new GridLayout(3, 1));
+        pnlSagBilgi.setOpaque(false);
+        pnlSagBilgi.setPreferredSize(new Dimension(250, 0));
         
-        JButton btnHazirlaniyor = new JButton("Hazırlanıyor");
-        btnHazirlaniyor.setBackground(new Color(41, 128, 185)); btnHazirlaniyor.setForeground(Color.WHITE);
-        btnHazirlaniyor.setEnabled(!durum.equals("HAZIRLANIYOR") && !durum.equals("HAZIR"));
-        btnHazirlaniyor.addActionListener(e -> durumDegistir(id, "HAZIRLANIYOR"));
+        String gorselDurum = durum.equals("YENI") || durum.equals("BEKLEMEDE") ? "Sıraya Alındı / Bekliyor" : 
+                             durum.equals("HAZIRLANIYOR") ? "Hazırlanıyor" : "Tamamlandı";
+                             
+        pnlSagBilgi.add(new JLabel("<html><font size='4'><b>Durum:</b> " + gorselDurum + "</font></html>"));
+        pnlSagBilgi.add(new JLabel("<html><font size='4'><b>Tip:</b> " + masa + "</font></html>"));
+        
+        JLabel lblZaman = new JLabel("<html><font size='4'><b>Süre:</b> 00:00:00</font></html>");
+        
+        if(!durum.equals("HAZIR")) {
+            zamanEtiketleri.put(lblZaman, tarih); 
+        } else {
+            lblZaman.setText("<html><font size='4'><b>Süre:</b> Tamamlandı</font></html>");
+        }
+        
+        pnlSagBilgi.add(lblZaman);
 
-        JButton btnHazir = new JButton("Hazır");
-        btnHazir.setBackground(new Color(39, 174, 96)); btnHazir.setForeground(Color.WHITE);
-        btnHazir.setEnabled(!durum.equals("HAZIR"));
-        btnHazir.addActionListener(e -> durumDegistir(id, "HAZIR"));
+        kart.add(pnlSolBilgi, BorderLayout.CENTER);
+        kart.add(pnlSagBilgi, BorderLayout.EAST);
 
-        pnlAlt.add(btnHazirlaniyor);
-        pnlAlt.add(btnHazir);
-        kart.add(pnlAlt, BorderLayout.SOUTH);
+        MouseAdapter ciftTiklama = new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2 && !durum.equals("HAZIR")) {
+                    durumDegistir(id, "HAZIR");
+                }
+            }
+        };
+        kart.addMouseListener(ciftTiklama);
+        txtUrunler.addMouseListener(ciftTiklama);
 
         return kart;
     }
 
-    private void durumDegistir(String id, String yeniDurum) {
+    private String icerikRenklendir(String yazi) {
+        yazi = yazi.replaceAll("(?i)(olmasın|çıkart|hariç|yok|soğansız|domatessiz|istemiyor|koyma)", "<span style='color:#c0392b; font-weight:bold;'>$1</span>");
+        yazi = yazi.replaceAll("(?i)(ekstra|bol|fazla|çift|ekle|büyük|ilave)", "<span style='color:#27ae60; font-weight:bold;'>$1</span>");
+        yazi = yazi.replaceAll("(?i)(kola|ayran|su\\b|şalgam|çay|fanta|meyve suyu|sprite|soda)", "<span style='color:#2980b9; font-weight:bold;'>🥤 $1</span>");
+        return "<html><div style='font-family: Arial; font-size: 14px; line-height: 1.2;'>" + yazi + "</div></html>";
+    }
+
+    private void durumDegistir(String id, String yeni) {
         new Thread(() -> {
-            anaPanel.sunucuyaKomutGonderVeCevapAl("SIPARIS_DURUM_GUNCELLE|" + id + "|" + yeniDurum);
+            anaPanel.sunucuyaKomutGonderVeCevapAl("SIPARIS_DURUM_GUNCELLE|" + id + "|" + yeni);
             SwingUtilities.invokeLater(() -> verileriYenile());
         }).start();
     }
 
-    // Kronometreyi her 1 saniyede bir tetikleyen arka plan metodu
     private void zamanlariGuncelle() {
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         Date suan = new Date();
-        
-        for (Map.Entry<JLabel, String> entry : zamanEtiketleri.entrySet()) {
+        for (Map.Entry<JLabel, String> e : zamanEtiketleri.entrySet()) {
             try {
-                Date siparisZamani = sdf.parse(entry.getValue());
-                long farkMs = suan.getTime() - siparisZamani.getTime();
-                
-                if(farkMs < 0) farkMs = 0;
-
-                long saniye = (farkMs / 1000) % 60;
-                long dakika = (farkMs / (1000 * 60)) % 60;
-                long saat = (farkMs / (1000 * 60 * 60)) % 24;
-
-                String formatliZaman = String.format("%02d:%02d:%02d", saat, dakika, saniye);
-                entry.getKey().setText("⌛ " + formatliZaman);
-            } catch (Exception e) {
-                entry.getKey().setText("⌛ Bekliyor..");
+                Date d = sdf.parse(e.getValue());
+                long diff = suan.getTime() - d.getTime();
+                if(diff < 0) diff = 0;
+                long s = (diff / 1000) % 60; long m = (diff / (1000 * 60)) % 60; long h = (diff / (1000 * 60 * 60)) % 24;
+                e.getKey().setText(String.format("<html><font size='4'><b>Süre:</b> %02d:%02d:%02d</font></html>", h, m, s));
+            } catch (Exception ex) { 
+                e.getKey().setText("<html><font size='4'><b>Süre:</b> Bekliyor..</font></html>"); 
             }
         }
     }

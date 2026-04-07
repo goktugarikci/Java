@@ -178,7 +178,10 @@ public class ClientHandler implements Runnable {
                 case "SIPARIS_ODEME_AL":
                     if (parcalar.length >= 3) return DatabaseManager.siparisOdemeAl(Integer.parseInt(parcalar[1]), parcalar[2]);
                     return "HATA|Eksik parametre!";
-
+                case "GUN_SONU_AL":
+                    return DatabaseManager.gunSonuRaporuAl();
+                case "GUNLUK_OZET_GETIR":
+                    return DatabaseManager.gunlukOzetGetir();
                 case "MUTFAK_SIPARIS_GETIR":
                     return DatabaseManager.mutfakSiparisleriGetir();
                 case "MUTFAK_SIPARIS_GETIR_FULL":
@@ -212,9 +215,6 @@ public class ClientHandler implements Runnable {
                     return "HATA|Eksik parametre!";
                 case "KASA_GECMIS_GETIR":
                     return DatabaseManager.kasaGecmisSiparisleriGetir();
-                case "GUN_SONU_AL":
-                    if (parcalar.length >= 2) return DatabaseManager.gunSonuAl(parcalar[1]);
-                    return "HATA|Eksik parametre!";
                 case "ESKI_RAPORLARI_GETIR":
                     return DatabaseManager.eskiRaporlariGetir();
                 case "SIPARIS_OLUSTUR":

@@ -549,15 +549,28 @@ public class DatabaseManager {
         } catch (Exception e) { return "HATA|" + e.getMessage(); }
     }
 
+// ==========================================
+    // SİPARİŞ DURUMUNU GÜNCELLEME METODU (Mutfak, Kasa vb. için)
+    // ==========================================
     public static String siparisDurumuGuncelle(int orderId, String yeniDurum) {
         String sql = "UPDATE Siparisler_Mutfak SET Durum = ? WHERE OrderID = ?";
-        try (Connection conn = DriverManager.getConnection(URL); PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, yeniDurum); pstmt.setInt(2, orderId);
-            int affected = pstmt.executeUpdate();
-            if (affected > 0) return "BAŞARILI|Sipariş durumu '" + yeniDurum + "' olarak güncellendi.";
-            return "HATA|Sipariş bulunamadı.";
-        } catch (Exception e) { return "HATA|Durum güncellenemedi: " + e.getMessage(); }
+        try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL);
+             java.sql.PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setString(1, yeniDurum);
+            pstmt.setInt(2, orderId);
+            int etkilenen = pstmt.executeUpdate();
+            
+            if (etkilenen > 0) {
+                return "BAŞARILI|Durum güncellendi.";
+            } else {
+                return "HATA|Sipariş bulunamadı veya güncellenemedi.";
+            }
+        } catch (Exception e) { 
+            return "HATA|Durum güncelleme hatası: " + e.getMessage(); 
+        }
     }
+
 
     public static String siparisOdemeAl(int orderId, String odemeTuru) {
         String sql = "UPDATE Siparisler_Mutfak SET Durum = 'ODENDI' WHERE OrderID = ?";
@@ -569,47 +582,202 @@ public class DatabaseManager {
         } catch (Exception e) { return "HATA|Ödeme alınamadı: " + e.getMessage(); }
         
     }
+    // ==========================================
+    // 1. GÜNLÜK ÖZET (DASHBOARD) - GECE SIFIRLANMAYAN VARDİYA SİSTEMİ
+    // ==========================================
+    public static String gunlukOzetGetir() {
+        finansalTablolariHazirla();
+
+        double toplamCiro = 0.0;
+        int tamamlananSiparis = 0;
+        int aktifMasa = 0;
+        int bugunkuRezervasyon = 0;
+
+        try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL);
+             java.sql.Statement stmt = conn.createStatement()) {
+
+            // 1. EN SON ALINAN "GÜN SONU (Z RAPORU)" SAATİNİ BUL
+            String sonZRaporuZamani = "1970-01-01 00:00:00"; // Eğer hiç rapor alınmamışsa en baştan başlar
+            try (java.sql.ResultSet rsZ = stmt.executeQuery("SELECT MAX(Tarih) AS SonZ FROM ZRaporlari")) {
+                if (rsZ.next() && rsZ.getString("SonZ") != null) {
+                    sonZRaporuZamani = rsZ.getString("SonZ");
+                }
+            }
+
+            // 2. O SAATTEN BU YANA (ŞU ANKİ VARDİYADA) KESİLEN SİPARİŞLERİ TOPLA
+            // Dikkat: date('now') kaldırıldı! Sadece son rapor saatinden büyük olanları toplar.
+            String sqlCiro = "SELECT SUM(ToplamTutar) AS GunlukCiro, COUNT(*) AS SiparisSayisi " +
+                             "FROM SiparisGecmisi WHERE Tarih > '" + sonZRaporuZamani + "'";
+            
+            try (java.sql.ResultSet rs = stmt.executeQuery(sqlCiro)) {
+                if (rs.next()) {
+                    toplamCiro = rs.getDouble("GunlukCiro");
+                    tamamlananSiparis = rs.getInt("SiparisSayisi");
+                }
+            }
+
+            // 3. AKTİF MASALARI SAYMA (Hazır olmayanlar zaten masada oturanlardır)
+            String sqlMasa = "SELECT COUNT(DISTINCT MasaAdi) AS MasaSayisi FROM Siparisler_Mutfak WHERE Durum != 'HAZIR'";
+            try (java.sql.ResultSet rs = stmt.executeQuery(sqlMasa)) {
+                if (rs.next()) aktifMasa = rs.getInt("MasaSayisi");
+            }
+
+            // 4. REZERVASYONLAR (Bu normal takvim gününe göre çalışır)
+            String sqlRez = "SELECT COUNT(*) AS RezSayisi FROM Rezervasyonlar WHERE date(Tarih) = date('now', 'localtime')";
+            try (java.sql.ResultSet rs = stmt.executeQuery(sqlRez)) {
+                if (rs.next()) bugunkuRezervasyon = rs.getInt("RezSayisi");
+            }
+
+            // Sonuçları paketle (0.00 TL formatında)
+            String formatliCiro = String.format(java.util.Locale.US, "%.2f", toplamCiro);
+            return "GUNLUK_OZET|" + formatliCiro + "|" + tamamlananSiparis + "|" + aktifMasa + "|" + bugunkuRezervasyon;
+
+        } catch (Exception e) {
+            return "HATA|Özet verileri alınamadı: " + e.getMessage();
+        }
+    }
 
     // ==========================================
-    // MUTFAK İŞLEMLERİ (ZAMAN & MÜŞTERİ BİLGİSİ EKLENDİ)
+    // 2. FİNANSAL TABLOLARI VE KOLONLARI OTOMATİK KURAN MOTOR
+    // ==========================================
+    public static void finansalTablolariHazirla() {
+        try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL);
+             java.sql.Statement stmt = conn.createStatement()) {
+            
+            stmt.execute("CREATE TABLE IF NOT EXISTS SiparisGecmisi (" +
+                         "ID INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                         "OrderID INTEGER, " +
+                         "MasaAdi TEXT, " +
+                         "FisHTML TEXT, " +
+                         "ToplamTutar REAL DEFAULT 0.0, " + 
+                         "Tarih DATETIME DEFAULT (datetime('now', 'localtime')))");
+
+            try { stmt.execute("ALTER TABLE SiparisGecmisi ADD COLUMN ToplamTutar REAL DEFAULT 0.0"); } catch (Exception ignored) {} 
+            try { stmt.execute("ALTER TABLE SiparisGecmisi ADD COLUMN Tarih DATETIME DEFAULT (datetime('now', 'localtime'))"); } catch (Exception ignored) {} 
+
+            // Z Raporları Tablosu (Tarih ve İş Günü ayrı tutulur)
+            stmt.execute("CREATE TABLE IF NOT EXISTS ZRaporlari (" +
+                         "RaporID INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                         "IsGunu TEXT, " + // Örn: 01.01.2025 (Mesainin başladığı gün)
+                         "Tarih DATETIME DEFAULT (datetime('now', 'localtime')), " + // Raporun alındığı tam an (Örn: 02.01.2025 02:00)
+                         "ToplamCiro REAL DEFAULT 0.0, " +
+                         "SiparisSayisi INTEGER DEFAULT 0)");
+            
+        } catch (Exception e) {
+            System.out.println("Tablo kurulum hatası: " + e.getMessage());
+        }
+    }
+
+    // ==========================================
+    // 3. GÜN SONU ALMA (Z RAPORU) VE RESETLEME İŞLEMİ
+    // ==========================================
+    public static String gunSonuRaporuAl() {
+        finansalTablolariHazirla();
+        
+        try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL);
+             java.sql.Statement stmt = conn.createStatement()) {
+            
+            // 1. En Son Rapor Ne Zaman Alınmış?
+            String sonZRaporuZamani = "1970-01-01 00:00:00";
+            try (java.sql.ResultSet rsZ = stmt.executeQuery("SELECT MAX(Tarih) AS SonZ FROM ZRaporlari")) {
+                if (rsZ.next() && rsZ.getString("SonZ") != null) sonZRaporuZamani = rsZ.getString("SonZ");
+            }
+
+            double ciro = 0.0;
+            int siparis = 0;
+            String isGunuTarihi = new java.text.SimpleDateFormat("dd.MM.yyyy").format(new java.util.Date()); 
+
+            // 2. O saatten bu yana olan tüm ciro, sipariş ve VARDİYANIN BAŞLADIĞI İLK TARİHİ bul!
+            String sqlOzet = "SELECT SUM(ToplamTutar) AS Ciro, COUNT(*) AS Adet, MIN(Tarih) AS VardiyaBaslangici " +
+                             "FROM SiparisGecmisi WHERE Tarih > '" + sonZRaporuZamani + "'";
+            
+            try (java.sql.ResultSet rs = stmt.executeQuery(sqlOzet)) {
+                if (rs.next()) {
+                    ciro = rs.getDouble("Ciro");
+                    siparis = rs.getInt("Adet");
+                    String baslangic = rs.getString("VardiyaBaslangici");
+                    
+                    // İş gününü ilk siparişin tarihinden al (Böylece 01.01 öğlen başlayıp 02.01 gece biten iş, 01.01 sayılır)
+                    if (baslangic != null && baslangic.length() >= 10) {
+                        String yil = baslangic.substring(0, 4);
+                        String ay = baslangic.substring(5, 7);
+                        String gun = baslangic.substring(8, 10);
+                        isGunuTarihi = gun + "." + ay + "." + yil; 
+                    }
+                }
+            }
+
+            if (siparis == 0) {
+                return "HATA|Z Raporu alınacak yeni bir işlem/ciro bulunamadı!";
+            }
+
+            // 3. Z Raporunu (Gün Sonunu) Veritabanına Arşivle
+            String sqlZKaydet = "INSERT INTO ZRaporlari (IsGunu, Tarih, ToplamCiro, SiparisSayisi) VALUES (?, datetime('now', 'localtime'), ?, ?)";
+            try (java.sql.PreparedStatement pstmt = conn.prepareStatement(sqlZKaydet)) {
+                pstmt.setString(1, isGunuTarihi); // Sisteme 01.01 olarak işlenir
+                pstmt.setDouble(2, ciro);
+                pstmt.setInt(3, siparis);
+                pstmt.executeUpdate();
+            }
+
+            return "BASARILI|Gün Sonu Başarıyla Alındı!\\nİş Günü: " + isGunuTarihi + "\\nToplam Ciro: " + String.format(java.util.Locale.US, "%.2f", ciro) + " TL";
+
+        } catch (Exception e) {
+            return "HATA|Gün Sonu alınırken hata oluştu: " + e.getMessage();
+        }
+    }
+    // ==========================================
+    // MUTFAK İŞLEMLERİ (FİŞ BİLGİSİ GÖNDERİMİ EKLENDİ)
     // ==========================================
     public static String mutfakSiparisleriGetirFull() {
         StringBuilder sb = new StringBuilder("MUTFAK_FULL_VERI|");
-        String sql = "SELECT OrderID, MasaAdi, Musteri, UrunlerDatasi, Durum, Tarih FROM Siparisler_Mutfak WHERE Durum IN ('YENI', 'HAZIRLANIYOR', 'HAZIR') ORDER BY OrderID ASC";
+        String sql = "SELECT * FROM Siparisler_Mutfak WHERE Durum IN ('YENI', 'BEKLEMEDE', 'HAZIRLANIYOR', 'HAZIR') ORDER BY OrderID ASC";
         
-        try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL)) {
+        try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL);
+             java.sql.Statement stmt = conn.createStatement(); 
+             java.sql.ResultSet rs = stmt.executeQuery(sql)) {
             
-            // Eğer veritabanında 'Tarih' sütunu henüz yoksa anında oluştur!
-            try (java.sql.Statement st = conn.createStatement()) {
-                st.execute("ALTER TABLE Siparisler_Mutfak ADD COLUMN Tarih TEXT DEFAULT (datetime('now','localtime'));");
-            } catch (Exception ignored) {}
-            
-            try (java.sql.Statement stmt = conn.createStatement(); java.sql.ResultSet rs = stmt.executeQuery(sql)) {
-                boolean kayitVar = false;
-                while (rs.next()) {
-                    kayitVar = true;
-                    String urunler = rs.getString("UrunlerDatasi");
-                    if (urunler == null) urunler = "İçerik Bulunamadı";
-                    urunler = urunler.replace("\n", " ").replace("\r", " "); // Kopma koruması
-
-                    String musteri = rs.getString("Musteri");
-                    if (musteri == null || musteri.isEmpty()) musteri = "Müşteri Bilinmiyor";
-
-                    String tarih = rs.getString("Tarih");
-                    if (tarih == null) tarih = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date());
-
-                    sb.append(rs.getInt("OrderID")).append("~_~")
-                      .append(rs.getString("MasaAdi")).append("~_~")
-                      .append(musteri).append("~_~")
-                      .append(urunler).append("~_~")
-                      .append(rs.getString("Durum")).append("~_~")
-                      .append(tarih).append("|||");
+            boolean kayitVar = false;
+            while (rs.next()) {
+                kayitVar = true;
+                
+                int orderId = rs.getInt("OrderID");
+                String durum = rs.getString("Durum");
+                
+                String masa = "Tür/Masa Bilinmiyor";
+                try { masa = rs.getString("Masa"); } catch (Exception e1) {
+                    try { masa = rs.getString("MasaAdi"); } catch (Exception e2) {
+                        try { masa = rs.getString("Tur"); } catch (Exception e3) {}
+                    }
                 }
-                if (!kayitVar) return "MUTFAK_FULL_VERI|BOS";
-                return sb.toString();
+                
+                String musteri = "Müşteri Bilinmiyor";
+                try { musteri = rs.getString("Musteri"); } catch (Exception e) {}
+                if (musteri == null || musteri.trim().isEmpty()) musteri = "Müşteri Bilinmiyor";
+
+                String tarih = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date());
+                try { 
+                    String t = rs.getString("Tarih");
+                    if (t != null && !t.trim().isEmpty()) tarih = t;
+                } catch (Exception e) {}
+
+                // KRİTİK: Boş UrunlerDatasi yerine, tüm detayların olduğu FisHTML'i çekiyoruz!
+                String fisHtml = "İçerik Bulunamadı";
+                try { fisHtml = rs.getString("FisHTML"); } catch (Exception e) {}
+                if (fisHtml != null) fisHtml = fisHtml.replace("\n", " ").replace("\r", " ").replace("|", " ");
+
+                sb.append(orderId).append("~_~")
+                  .append(masa).append("~_~")
+                  .append(musteri).append("~_~")
+                  .append(fisHtml).append("~_~") // Fişi gönderiyoruz
+                  .append(durum).append("~_~")
+                  .append(tarih).append("|||");
             }
+            if (!kayitVar) return "MUTFAK_FULL_VERI|BOS";
+            return sb.toString();
+            
         } catch (Exception e) { 
-            return "HATA|Mutfak verileri çekilemedi: " + e.getMessage(); 
+            return "HATA|SQL Hatası: " + e.getMessage(); 
         }
     }
 
