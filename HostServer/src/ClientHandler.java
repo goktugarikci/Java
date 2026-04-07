@@ -174,9 +174,17 @@ public class ClientHandler implements Runnable {
                 case "SIPARIS_DURUM_GUNCELLE":
                     if (parcalar.length >= 3) return DatabaseManager.siparisDurumuGuncelle(Integer.parseInt(parcalar[1]), parcalar[2]);
                     return "HATA|Eksik parametre!";
-                
                 case "SIPARIS_ODEME_AL":
-                    if (parcalar.length >= 3) return DatabaseManager.siparisOdemeAl(Integer.parseInt(parcalar[1]), parcalar[2]);
+                    // Artık 4. parametre olarak FİYAT da geliyor!
+                    if (parcalar.length >= 4) {
+                        return DatabaseManager.siparisOdemeAl(Integer.parseInt(parcalar[1]), parcalar[2], parcalar[3]);
+                    } else if (parcalar.length >= 3) {
+                        // Eğer eski sürümden komut gelirse fiyatı 0 varsayarak çökmeyi engeller
+                        return DatabaseManager.siparisOdemeAl(Integer.parseInt(parcalar[1]), parcalar[2], "0.00");
+                    }
+                    return "HATA|Eksik parametre!";
+                case "KURYE_HESAP_GETIR":
+                    if (parcalar.length >= 2) return DatabaseManager.kuryeGunlukRaporGetir(parcalar[1]);
                     return "HATA|Eksik parametre!";
                 case "GUN_SONU_AL":
                     return DatabaseManager.gunSonuRaporuAl();

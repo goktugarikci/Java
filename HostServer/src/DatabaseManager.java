@@ -572,15 +572,83 @@ public class DatabaseManager {
     }
 
 
-    public static String siparisOdemeAl(int orderId, String odemeTuru) {
-        String sql = "UPDATE Siparisler_Mutfak SET Durum = 'ODENDI' WHERE OrderID = ?";
-        try (Connection conn = DriverManager.getConnection(URL); PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setInt(1, orderId);
-            int affected = pstmt.executeUpdate();
-            if (affected > 0) return "BAŞARILI|Sipariş başarıyla kapatıldı (" + odemeTuru + ").";
-            return "HATA|Ödenecek sipariş bulunamadı.";
-        } catch (Exception e) { return "HATA|Ödeme alınamadı: " + e.getMessage(); }
+// ==========================================
+    // KASADAN ÖDEME ALINDIĞINDA KURYE VE ÖDEME TÜRÜNÜ GEÇMİŞE YAZAR
+    // ==========================================
+    public static String siparisOdemeAl(int orderId, String odemeTuru, String tutar) {
+        String sqlUpdate = "UPDATE Siparisler_Mutfak SET Durum = 'ODENDI' WHERE OrderID = ?";
         
+        // Z Raporu ve Kurye hesapları için Kurye ve OdemeTuru bilgilerini de Ciro Arşivine yolluyoruz
+        String sqlInsertGecmis = "INSERT INTO SiparisGecmisi (OrderID, MasaAdi, FisHTML, ToplamTutar, Tarih, Kurye, OdemeTuru) " +
+                                 "SELECT OrderID, MasaIsmi, FisHTML, ?, datetime('now', 'localtime'), Kurye, ? " +
+                                 "FROM Siparisler_Mutfak WHERE OrderID = ?";
+
+        try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL)) {
+            try (java.sql.PreparedStatement pstmt = conn.prepareStatement(sqlUpdate)) {
+                pstmt.setInt(1, orderId);
+                pstmt.executeUpdate();
+            }
+            try (java.sql.PreparedStatement pstmt2 = conn.prepareStatement(sqlInsertGecmis)) {
+                double miktar = 0.0;
+                try { miktar = Double.parseDouble(tutar.replace(",", ".")); } catch (Exception ignored) {}
+                
+                pstmt2.setDouble(1, miktar);
+                pstmt2.setString(2, odemeTuru); // Nakit veya Kart
+                pstmt2.setInt(3, orderId);
+                pstmt2.executeUpdate();
+            }
+            return "BAŞARILI|Sipariş kapatıldı ve " + tutar + " TL tutarındaki ödeme (" + odemeTuru + ") Z Raporu cirosuna eklendi!";
+            
+        } catch (Exception e) { 
+            return "HATA|Ödeme alınamadı: " + e.getMessage(); 
+        }
+    }
+    // ==========================================
+    // YENİ: KURYE GÜN SONU / VARDİYA HESABI ALMA
+    // ==========================================
+    public static String kuryeGunlukRaporGetir(String kuryeAdi) {
+        StringBuilder sb = new StringBuilder("KURYE_HESAP|");
+        double toplamNakit = 0, toplamKart = 0;
+        int siparisSayisi = 0;
+        StringBuilder liste = new StringBuilder();
+
+        // Z Raporu alınsa dahi, kuryenin "Bugün" (date('now')) teslim ettiği tüm arşivi çeker
+        String sql = "SELECT ToplamTutar, OdemeTuru, FisHTML, Tarih FROM SiparisGecmisi " +
+                     "WHERE Kurye = ? AND date(Tarih) = date('now', 'localtime') ORDER BY ID DESC";
+
+        try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL);
+             java.sql.PreparedStatement pstmt = conn.prepareStatement(sql)) {
+             
+            pstmt.setString(1, kuryeAdi);
+            java.sql.ResultSet rs = pstmt.executeQuery();
+            
+            while(rs.next()) {
+                siparisSayisi++;
+                double tutar = rs.getDouble("ToplamTutar");
+                String tur = rs.getString("OdemeTuru");
+                String html = rs.getString("FisHTML");
+                String tarih = rs.getString("Tarih");
+                
+                if(tur != null && tur.toLowerCase().contains("kart")) toplamKart += tutar;
+                else toplamNakit += tutar;
+
+                // Fişin içinden müşteri ismini söküp alır
+                String musteri = "Bilinmiyor";
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile("Müşteri:\\s*<b>([^<]+)</b>").matcher(html);
+                if(m.find()) musteri = m.group(1);
+
+                liste.append(tarih.substring(11, 16)).append(" ➔ ").append(musteri)
+                     .append(" (").append(tutar).append(" TL - ").append(tur).append(")<br>");
+            }
+            
+            sb.append(siparisSayisi).append("|").append(toplamNakit).append("|").append(toplamKart).append("|");
+            if(siparisSayisi == 0) sb.append("Bugün teslim edilen sipariş bulunmamaktadır.");
+            else sb.append(liste.toString());
+            
+            return sb.toString();
+        } catch (Exception e) { 
+            return "HATA|" + e.getMessage(); 
+        }
     }
     // ==========================================
     // 1. GÜNLÜK ÖZET (DASHBOARD) - GECE SIFIRLANMAYAN VARDİYA SİSTEMİ
@@ -638,7 +706,7 @@ public class DatabaseManager {
     }
 
     // ==========================================
-    // 2. FİNANSAL TABLOLARI VE KOLONLARI OTOMATİK KURAN MOTOR
+    // FİNANSAL TABLOLARI VE KOLONLARI OTOMATİK KURAN MOTOR
     // ==========================================
     public static void finansalTablolariHazirla() {
         try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL);
@@ -650,16 +718,19 @@ public class DatabaseManager {
                          "MasaAdi TEXT, " +
                          "FisHTML TEXT, " +
                          "ToplamTutar REAL DEFAULT 0.0, " + 
+                         "Kurye TEXT DEFAULT 'Atanmadi', " + // KURYE HESAPLARI İÇİN YENİ
+                         "OdemeTuru TEXT DEFAULT 'Nakit', " + // KURYE NAKİT/KART AYRIMI İÇİN YENİ
                          "Tarih DATETIME DEFAULT (datetime('now', 'localtime')))");
 
             try { stmt.execute("ALTER TABLE SiparisGecmisi ADD COLUMN ToplamTutar REAL DEFAULT 0.0"); } catch (Exception ignored) {} 
             try { stmt.execute("ALTER TABLE SiparisGecmisi ADD COLUMN Tarih DATETIME DEFAULT (datetime('now', 'localtime'))"); } catch (Exception ignored) {} 
+            try { stmt.execute("ALTER TABLE SiparisGecmisi ADD COLUMN Kurye TEXT DEFAULT 'Atanmadi'"); } catch (Exception ignored) {} 
+            try { stmt.execute("ALTER TABLE SiparisGecmisi ADD COLUMN OdemeTuru TEXT DEFAULT 'Nakit'"); } catch (Exception ignored) {} 
 
-            // Z Raporları Tablosu (Tarih ve İş Günü ayrı tutulur)
             stmt.execute("CREATE TABLE IF NOT EXISTS ZRaporlari (" +
                          "RaporID INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                         "IsGunu TEXT, " + // Örn: 01.01.2025 (Mesainin başladığı gün)
-                         "Tarih DATETIME DEFAULT (datetime('now', 'localtime')), " + // Raporun alındığı tam an (Örn: 02.01.2025 02:00)
+                         "IsGunu TEXT, " + 
+                         "Tarih DATETIME DEFAULT (datetime('now', 'localtime')), " + 
                          "ToplamCiro REAL DEFAULT 0.0, " +
                          "SiparisSayisi INTEGER DEFAULT 0)");
             
@@ -727,11 +798,12 @@ public class DatabaseManager {
         }
     }
     // ==========================================
-    // MUTFAK İŞLEMLERİ (FİŞ BİLGİSİ GÖNDERİMİ EKLENDİ)
+    // MUTFAK İŞLEMLERİ (ÖDENDİ, İPTAL VE YOLDA OLANLARI DA GETİRİR)
     // ==========================================
     public static String mutfakSiparisleriGetirFull() {
         StringBuilder sb = new StringBuilder("MUTFAK_FULL_VERI|");
-        String sql = "SELECT * FROM Siparisler_Mutfak WHERE Durum IN ('YENI', 'BEKLEMEDE', 'HAZIRLANIYOR', 'HAZIR') ORDER BY OrderID ASC";
+        // DİKKAT: Artık sadece YENİ veya HAZIR olanları değil, Arşivlenmemiş (Gün Sonu Alınmamış) TÜM siparişleri mutfağa yollar
+        String sql = "SELECT * FROM Siparisler_Mutfak WHERE Durum NOT LIKE '%_ARSIV' ORDER BY OrderID DESC LIMIT 100";
         
         try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL);
              java.sql.Statement stmt = conn.createStatement(); 
@@ -745,23 +817,18 @@ public class DatabaseManager {
                 String durum = rs.getString("Durum");
                 
                 String masa = "Tür/Masa Bilinmiyor";
-                try { masa = rs.getString("Masa"); } catch (Exception e1) {
-                    try { masa = rs.getString("MasaAdi"); } catch (Exception e2) {
-                        try { masa = rs.getString("Tur"); } catch (Exception e3) {}
-                    }
-                }
+                try { masa = rs.getString("MasaIsmi"); } catch (Exception e1) {}
                 
                 String musteri = "Müşteri Bilinmiyor";
-                try { musteri = rs.getString("Musteri"); } catch (Exception e) {}
+                try { musteri = rs.getString("MusteriIsmi"); } catch (Exception e) {}
                 if (musteri == null || musteri.trim().isEmpty()) musteri = "Müşteri Bilinmiyor";
 
                 String tarih = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date());
                 try { 
-                    String t = rs.getString("Tarih");
+                    String t = rs.getString("SiparisZamani");
                     if (t != null && !t.trim().isEmpty()) tarih = t;
                 } catch (Exception e) {}
 
-                // KRİTİK: Boş UrunlerDatasi yerine, tüm detayların olduğu FisHTML'i çekiyoruz!
                 String fisHtml = "İçerik Bulunamadı";
                 try { fisHtml = rs.getString("FisHTML"); } catch (Exception e) {}
                 if (fisHtml != null) fisHtml = fisHtml.replace("\n", " ").replace("\r", " ").replace("|", " ");
@@ -769,7 +836,7 @@ public class DatabaseManager {
                 sb.append(orderId).append("~_~")
                   .append(masa).append("~_~")
                   .append(musteri).append("~_~")
-                  .append(fisHtml).append("~_~") // Fişi gönderiyoruz
+                  .append(fisHtml).append("~_~") 
                   .append(durum).append("~_~")
                   .append(tarih).append("|||");
             }

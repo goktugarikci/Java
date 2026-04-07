@@ -1,3 +1,5 @@
+
+
 import javax.swing.*;
 import java.awt.*;
 import java.io.BufferedReader;
@@ -12,7 +14,7 @@ public class PersonelPaneli extends JFrame {
     private String aktifRol;
 
     // ==========================================
-    // SİSTEM MODÜLLERİ (Parçalanmış Dosyalar)
+    // SİSTEM MODÜLLERİ 
     // ==========================================
     private SiparisModulu siparisEkrani;
     private MutfakModulu mutfakEkrani;
@@ -23,7 +25,7 @@ public class PersonelPaneli extends JFrame {
 
     public PersonelPaneli(String adSoyad, String rol) {
         this.aktifPersonel = adSoyad;
-        this.aktifRol = rol; // Yeni roller: Yetkili(admin), Kasiyer, Garson, Staff, Motokurye
+        this.aktifRol = rol; // Rol Seçenekleri: Yetkili(admin), Kasiyer, Garson, Staff, Motokurye
 
         setUndecorated(true);
         setExtendedState(JFrame.MAXIMIZED_BOTH);
@@ -37,9 +39,10 @@ public class PersonelPaneli extends JFrame {
         icerikPaneli = new JPanel(cardLayout);
 
         // ==========================================
-        // MODÜLLERİ BAŞLAT VE EKRANA EKLE
+        // MODÜLLERİ BAŞLAT VE EKRANA EKLE (YENİ MİMARİ)
         // ==========================================
-        siparisEkrani = new SiparisModulu(this, aktifPersonel, aktifRol);
+        // DİKKAT: SiparisModulu artık yeni mimariye uygun olarak 2 parametre ile çağrılıyor
+        siparisEkrani = new SiparisModulu(this, aktifPersonel);
         mutfakEkrani = new MutfakModulu(this);
         kasaEkrani = new KasaModulu(this);
         rezervasyonEkrani = new RezervasyonModulu(this);
@@ -93,6 +96,7 @@ public class PersonelPaneli extends JFrame {
         ustBar.add(btnCikis, BorderLayout.EAST); 
         add(ustBar, BorderLayout.NORTH);
     }
+
     private void solMenuAyarla() {
         JPanel solMenu = new JPanel(); 
         solMenu.setLayout(new BoxLayout(solMenu, BoxLayout.Y_AXIS)); 
@@ -148,6 +152,7 @@ public class PersonelPaneli extends JFrame {
             else if (cardName.equals("Mutfak Panosu")) mutfakEkrani.verileriYenile(); 
             else if (cardName.equals("Rezervasyonlar")) rezervasyonEkrani.verileriYenile(); 
             else if (cardName.equals("Kurye Paneli")) kuryeEkrani.verileriYenile(); 
+            else if (cardName.equals("Masalar ve Sipariş")) siparisEkrani.baslat(); 
         }); 
         return btn;
     }
@@ -156,22 +161,20 @@ public class PersonelPaneli extends JFrame {
     // KÖPRÜ METOTLARI (Modüller Arası İletişim)
     // ==========================================
     
-    // Adisyon ekranı açmak için yönlendirici
     public void adisyonEkraniAc(String siparisTuru, String baslikIsmi) {
         if (siparisEkrani != null) {
             new AdisyonEkrani(this, siparisEkrani, aktifPersonel, siparisTuru, baslikIsmi).setVisible(true);
         }
     }
 
-    // Sipariş modülü kasayı güncellemek istediğinde kullanılır
     public void kasaGuncelle() {
         if(kasaEkrani != null) kasaEkrani.verileriYenile();
     }
 
-    // Kasa modülü ödeme aldığında Sipariş Modülündeki masayı sıfırlar
+    // YENİ MİMARİ: Kasa Modülü ödeme aldığında masayı veritabanından güncel duruma (BOS/Yeşil) çeker
     public void masayiSifirla(String masaAdi) {
         if (siparisEkrani != null) {
-            siparisEkrani.masayiSifirla(masaAdi);
+            siparisEkrani.baslat(); // Sipariş Modülünü canlı olarak yeniden çizer
         }
     }
 

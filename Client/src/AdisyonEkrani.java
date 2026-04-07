@@ -1,3 +1,4 @@
+
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
@@ -51,13 +52,10 @@ public class AdisyonEkrani extends JDialog {
                         oncekiSiparisHTML.append("<div style='border-bottom: 1px dashed #ccc; padding-bottom: 5px; margin-bottom: 5px;'>")
                                          .append(html).append("</div>");
                         
-                        int fBas = html.indexOf("<b>");
-                        if (fBas != -1) {
-                            int fEnd = html.indexOf("</b>", fBas);
-                            if (fEnd != -1) {
-                                String fiyatStr = html.substring(fBas + 3, fEnd).replace(" TL", "").replace(",", ".").trim();
-                                gecerliOncekiTutar += guvenliDoubleCevir(fiyatStr);
-                            }
+                        // Fiyatı eski fişten çekip önceki tutara ekliyoruz
+                        java.util.regex.Matcher m = java.util.regex.Pattern.compile("<!\\-\\-PRICE([0-9.,]+)").matcher(html);
+                        if (m.find()) {
+                            gecerliOncekiTutar += guvenliDoubleCevir(m.group(1));
                         }
                     }
                 }
@@ -212,7 +210,7 @@ public class AdisyonEkrani extends JDialog {
                    .append(alanKisiHTML).append("Müşteri: <b>").append(musteriAdi).append("</b><br><hr>"); 
             }
 
-            StringBuilder stokDusecekListe = new StringBuilder(); // Stok Düşme Motoru İçin Data Hazırlığı
+            StringBuilder stokDusecekListe = new StringBuilder(); 
 
             for (int i = 0; i < sepetTableModel.getRowCount(); i++) {
                 String urun = sepetTableModel.getValueAt(i, 0).toString(); 
@@ -231,16 +229,30 @@ public class AdisyonEkrani extends JDialog {
                     } 
                 }
             }
-            fis.append("</html>");
             
-            // Stok Listesini ve HTML'i Sunucuya Gönderiyoruz
+            // ==========================================
+            // YENİ EKLENEN KISIM: FİYATI FİŞE YAZDIRMAK
+            // ==========================================
+            double genelToplam = gecerliOncekiTutar + toplamTutar;
+            String formatliToplam = String.format(java.util.Locale.US, "%.2f", genelToplam);
+            
+            // 1. Kasiyer ve Müşteri için Görsel Tutar (Fişin en altına eklenir)
+            fis.append("<hr><div style='text-align: right; font-size: 15px;'>");
+            fis.append("<b>Genel Toplam: <span style='color:red;'>").append(formatliToplam).append(" TL</span></b>");
+            fis.append("</div>");
+            
+            // 2. Kasa modülünün arkada okuyabilmesi için Gizli Tutar Etiketi
+            fis.append("");
+            
+            fis.append("</html>");
+            // ==========================================
+            
             String gonderilecekStokDatasi = stokDusecekListe.length() > 0 ? stokDusecekListe.substring(0, stokDusecekListe.length() - 1) : "null";
             anaPanel.sunucuyaKomutGonderVeCevapAl("SIPARIS_OLUSTUR|" + baslikIsmi + "|" + musteriAdi + "|" + fis.toString() + "|" + gonderilecekStokDatasi);
             
             JOptionPane.showMessageDialog(this, "Sipariş mutfağa başarıyla iletildi!"); 
             dispose();
             
-            // Sipariş bitince arka plandaki masaları tazele
             if (siparisModulu != null) {
                 siparisModulu.baslat(); 
             }
@@ -299,9 +311,6 @@ public class AdisyonEkrani extends JDialog {
         pnlAna.setLayout(new BoxLayout(pnlAna, BoxLayout.Y_AXIS)); 
         pnlAna.setBorder(BorderFactory.createEmptyBorder(10, 15, 10, 15));
         
-        // ==========================================
-        // ÜRÜN ADET SEÇİCİ (SPINNER)
-        // ==========================================
         JPanel pnlAdet = new JPanel(new FlowLayout(FlowLayout.LEFT)); 
         pnlAdet.setBackground(Color.WHITE); 
         pnlAdet.setBorder(BorderFactory.createLineBorder(Color.GRAY));
@@ -313,9 +322,6 @@ public class AdisyonEkrani extends JDialog {
         pnlAna.add(pnlAdet); 
         pnlAna.add(Box.createVerticalStrut(10));
 
-        // ==========================================
-        // MALZEMELER (ÇIKARILABİLİR / EKSTRALAR)
-        // ==========================================
         JPanel pnlCikarilabilir = new JPanel(new GridLayout(0, 1, 5, 5)); 
         pnlCikarilabilir.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.GRAY), "İçindekiler (Çıkarılacakların tikini kaldırın)"));
         
@@ -387,7 +393,6 @@ public class AdisyonEkrani extends JDialog {
             String sonNot = String.join(" | ", notListesi); 
             if(sonNot.isEmpty()) sonNot = "Standart";
             
-            // Seçilen adet ile birim fiyatı çarpıyoruz
             double sonFiyat = birimFiyat * secilenAdet;
             sepetTableModel.addRow(new Object[]{urunAd, secilenAdet, sonFiyat, sonNot}); 
             hesaplaToplam(); 

@@ -1,5 +1,4 @@
 
-
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
@@ -58,13 +57,19 @@ public class UrunYonetimi extends JPanel {
         // ==========================================
         JPanel pnlUrun = new JPanel(new BorderLayout(10, 10));
         
-        urunTableModel = new DefaultTableModel(new String[]{"İsim", "Kategori", "Açıklama", "Fiyat", "İçindekiler Listesi (Ekstra İçerikler)"}, 0) { 
+        // DİKKAT: 6. Gizli sütun (RAW_MLZ) arka planda verileri formatlanmadan tutmak için eklendi.
+        urunTableModel = new DefaultTableModel(new String[]{"İsim", "Kategori", "Açıklama", "Fiyat", "İçindekiler Listesi (Ekstra İçerikler)", "RAW_MLZ"}, 0) { 
             @Override public boolean isCellEditable(int row, int column) { return false; } 
         };
         urunTablo = new JTable(urunTableModel); 
         urunTablo.setRowHeight(35); 
         urunTablo.setFont(new Font("Arial", Font.PLAIN, 14));
         urunTablo.getColumnModel().getColumn(4).setPreferredWidth(450); 
+        
+        // Gizli Sütunu Görünmez Yap
+        urunTablo.getColumnModel().getColumn(5).setMinWidth(0);
+        urunTablo.getColumnModel().getColumn(5).setMaxWidth(0);
+        urunTablo.getColumnModel().getColumn(5).setWidth(0);
         
         JPanel pnlUrunUst = new JPanel(new FlowLayout(FlowLayout.LEFT));
         cbKatSecim = new JComboBox<>(); 
@@ -81,9 +86,9 @@ public class UrunYonetimi extends JPanel {
         pnlUrun.add(pnlUrunUst, BorderLayout.NORTH);
         pnlUrun.add(new JScrollPane(urunTablo), BorderLayout.CENTER);
 
-        // --- YENİ ÜRÜN EKLEME FORMU (Görseldeki Tasarım) ---
+        // --- YENİ ÜRÜN EKLEME FORMU ---
         JPanel pnlUrunForm = new JPanel(new GridBagLayout()); 
-        pnlUrunForm.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(new Color(39, 174, 96), 2), "Yeni Ürün Ekle", 0, 0, new Font("Arial", Font.BOLD, 14)));
+        pnlUrunForm.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(new Color(39, 174, 96), 2), "Ürün Formu", 0, 0, new Font("Arial", Font.BOLD, 14)));
         GridBagConstraints gbc = new GridBagConstraints(); 
         gbc.insets = new Insets(10, 10, 10, 10); 
         gbc.fill = GridBagConstraints.HORIZONTAL; 
@@ -124,18 +129,31 @@ public class UrunYonetimi extends JPanel {
         pnlUrunForm.add(lblBilgi, gbc);
 
         // SATIR 5 (BUTONLAR)
-        JPanel pnlU3 = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton btnUrunSil = new JButton("❌ Seçili Ürünü Sil"); 
+        JPanel pnlU3 = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        
+        JButton btnFormTemizle = new JButton("🧹 Formu Temizle");
+        btnFormTemizle.setBackground(Color.GRAY);
+        btnFormTemizle.setForeground(Color.WHITE);
+        btnFormTemizle.setFont(new Font("Arial", Font.BOLD, 14));
+
+        JButton btnUrunSil = new JButton("❌ Sil"); 
         btnUrunSil.setBackground(new Color(192, 57, 43)); 
         btnUrunSil.setForeground(Color.WHITE); 
         btnUrunSil.setFont(new Font("Arial", Font.BOLD, 14));
 
-        JButton btnUrunEkle = new JButton("➕ Ürünü Ekle"); 
+        JButton btnUrunGuncelle = new JButton("🔄 Seçili Ürünü Güncelle");
+        btnUrunGuncelle.setBackground(new Color(243, 156, 18)); // Turuncu/Sarı ton
+        btnUrunGuncelle.setForeground(Color.WHITE);
+        btnUrunGuncelle.setFont(new Font("Arial", Font.BOLD, 14));
+
+        JButton btnUrunEkle = new JButton("➕ Yeni Ekle"); 
         btnUrunEkle.setBackground(new Color(39, 174, 96)); 
         btnUrunEkle.setForeground(Color.WHITE); 
         btnUrunEkle.setFont(new Font("Arial", Font.BOLD, 14));
         
+        pnlU3.add(btnFormTemizle);
         pnlU3.add(btnUrunSil); 
+        pnlU3.add(btnUrunGuncelle);
         pnlU3.add(btnUrunEkle);
         
         gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 4; 
@@ -150,6 +168,32 @@ public class UrunYonetimi extends JPanel {
         // DİNLEYİCİLER VE SUNUCU AKSİYONLARI
         // ==========================================
         
+        // TABLO TIKLANINCA FORMU DOLDURMA OLAYI
+        urunTablo.getSelectionModel().addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting() && urunTablo.getSelectedRow() != -1) {
+                int row = urunTablo.getSelectedRow();
+                txtUrunAd.setText(urunTableModel.getValueAt(row, 0).toString());
+                txtAciklama.setText(urunTableModel.getValueAt(row, 2).toString());
+                txtFiyat.setText(urunTableModel.getValueAt(row, 3).toString().replace(" TL", "").trim());
+                
+                String rawMlz = urunTableModel.getValueAt(row, 5).toString(); // Gizli veri
+                if (rawMlz.equals("null") || rawMlz.isEmpty()) {
+                    txtMalzemeler.setText("");
+                } else {
+                    txtMalzemeler.setText(rawMlz);
+                }
+            }
+        });
+
+        // FORM TEMİZLE BUTONU
+        btnFormTemizle.addActionListener(e -> {
+            txtUrunAd.setText("");
+            txtFiyat.setText("");
+            txtAciklama.setText("");
+            txtMalzemeler.setText("");
+            urunTablo.clearSelection();
+        });
+
         btnKatEkle.addActionListener(e -> {
             String katAd = txtKatAd.getText().trim();
             String katDesc = txtKatDesc.getText().trim();
@@ -200,6 +244,34 @@ public class UrunYonetimi extends JPanel {
             
             if (cvp.startsWith("BAŞARILI")) {
                 txtUrunAd.setText(""); txtFiyat.setText(""); txtAciklama.setText(""); txtMalzemeler.setText(""); 
+                urunTablo.clearSelection();
+                urunleriListele(kat);
+            }
+        });
+
+        // ÜRÜN GÜNCELLE BUTONU
+        btnUrunGuncelle.addActionListener(e -> {
+            int row = urunTablo.getSelectedRow();
+            if (row == -1) {
+                JOptionPane.showMessageDialog(this, "Güncellenecek ürünü önce tablodan seçin!", "Uyarı", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            
+            String eskiAd = urunTableModel.getValueAt(row, 0).toString();
+            String kat = cbKatSecim.getSelectedItem().toString();
+            String urunAd = txtUrunAd.getText().trim();
+            String fiyat = txtFiyat.getText().trim().replace(",","."); 
+            String aciklama = txtAciklama.getText().trim().isEmpty() ? "Açıklama Yok" : txtAciklama.getText().trim();
+            String mlz = txtMalzemeler.getText().trim().isEmpty() ? "null" : txtMalzemeler.getText().trim();
+            
+            String komut = "URUN_GUNCELLE_DETAYLI|" + eskiAd + "|" + kat + "|" + urunAd + "|" + fiyat + "|" + aciklama + "|gorsel_yok.png|" + mlz;
+            
+            String cvp = anaPanel.sunucuyaKomutGonderVeCevapAl(komut);
+            JOptionPane.showMessageDialog(this, cvp);
+            
+            if (cvp.startsWith("BAŞARILI")) {
+                txtUrunAd.setText(""); txtFiyat.setText(""); txtAciklama.setText(""); txtMalzemeler.setText(""); 
+                urunTablo.clearSelection();
                 urunleriListele(kat);
             }
         });
@@ -209,6 +281,8 @@ public class UrunYonetimi extends JPanel {
             if(row != -1) {
                 String seciliUrunAdi = urunTableModel.getValueAt(row, 0).toString();
                 JOptionPane.showMessageDialog(this, anaPanel.sunucuyaKomutGonderVeCevapAl("URUN_SIL|" + seciliUrunAdi));
+                txtUrunAd.setText(""); txtFiyat.setText(""); txtAciklama.setText(""); txtMalzemeler.setText(""); 
+                urunTablo.clearSelection();
                 if(cbKatSecim.getSelectedItem() != null) urunleriListele(cbKatSecim.getSelectedItem().toString());
             } else {
                 JOptionPane.showMessageDialog(this, "Önce tablodan silinecek ürünü seçin!");
@@ -231,10 +305,10 @@ public class UrunYonetimi extends JPanel {
         JTextField txtAd = new JTextField();
         JComboBox<String> cbTur = new JComboBox<>(new String[]{"Standart İçerik (Ücretsiz, Çıkarılabilir)", "Ekstra Malzeme (Ücretli, Eklenebilir)"});
         JTextField txtFiyat = new JTextField("0.0");
-        txtFiyat.setEnabled(false); // Standart seçiliyken fiyat kapalıdır.
+        txtFiyat.setEnabled(false); 
 
         cbTur.addActionListener(e -> {
-            if (cbTur.getSelectedIndex() == 1) { // Ekstra ise fiyatı aç
+            if (cbTur.getSelectedIndex() == 1) { 
                 txtFiyat.setEnabled(true);
                 txtFiyat.setText("");
             } else {
@@ -260,15 +334,12 @@ public class UrunYonetimi extends JPanel {
                 return;
             }
             
-            // Veritabanı Kodlaması (1 = Standart, 0 = Ekstra)
             String turKodu = cbTur.getSelectedIndex() == 0 ? "1" : "0";
             String fiyat = txtFiyat.getText().trim().replace(",", ".");
             if (fiyat.isEmpty()) fiyat = "0.0";
 
-            // Formatı birleştir
             String formatliVeri = ad + ":" + turKodu + ":" + fiyat;
 
-            // Metin kutusuna yazdır (Virgül ile ayırarak)
             String mevcut = txtMalzemeler.getText().trim();
             if (mevcut.isEmpty() || mevcut.equals("null")) {
                 txtMalzemeler.setText(formatliVeri);
@@ -319,7 +390,7 @@ public class UrunYonetimi extends JPanel {
                             String ad = d[0];
                             String fiyat = d[1] + " TL";
                             String aciklama = d[2];
-                            String rawMlz = d[5];
+                            String rawMlz = d[5]; // Veritabanındaki ham hali
                             
                             StringBuilder mlzFormatli = new StringBuilder();
                             if (rawMlz != null && !rawMlz.isEmpty() && !rawMlz.equals("null")) {
@@ -340,7 +411,8 @@ public class UrunYonetimi extends JPanel {
                                 mlzFormatli.append("İçerik Girilmemiş");
                             }
                             
-                            urunTableModel.addRow(new Object[]{ad, katAdi, aciklama, fiyat, mlzFormatli.toString()});
+                            // 6. hücreye (gizli sütun) ham veriyi (rawMlz) ekliyoruz
+                            urunTableModel.addRow(new Object[]{ad, katAdi, aciklama, fiyat, mlzFormatli.toString(), rawMlz});
                         }
                     }
                 }

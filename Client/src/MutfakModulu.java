@@ -22,7 +22,6 @@ public class MutfakModulu extends JPanel {
     private boolean uyariEkraniAcik = false; 
     private String aktifSekme = "AKTIF"; 
     
-    // Üst Sekme Butonları
     private JButton btnAktif;
     private JButton btnGecmis;
 
@@ -143,7 +142,8 @@ public class MutfakModulu extends JPanel {
                                     yeniSiparisVar = true;
                                 }
 
-                                boolean isGecmis = durum.equals("HAZIR");
+                                // KRİTİK YENİ MANTIK: Geçmiş siparişler artık Ödendi, İptal ve Yolda Olanları da kapsar!
+                                boolean isGecmis = durum.equals("HAZIR") || durum.equals("ODENDI") || durum.equals("IPTAL") || durum.equals("YOLA_CIKTI");
                                 
                                 if (aktifSekme.equals("AKTIF") && !isGecmis) {
                                     pnlSiparisler.add(siparisKartiOlustur(id, d[1], d[2], d[3], durum, d[5]));
@@ -208,22 +208,21 @@ public class MutfakModulu extends JPanel {
             BorderFactory.createEmptyBorder(10, 15, 10, 15) 
         ));
 
+        // DURUMLARA GÖRE KART RENKLERİ GÜNCELLENDİ
         if (durum.equals("YENI") || durum.equals("BEKLEMEDE")) {
-            kart.setBackground(new Color(255, 235, 153)); 
+            kart.setBackground(new Color(255, 235, 153)); // Açık Sarı
         } else if (durum.equals("HAZIRLANIYOR")) {
-            kart.setBackground(new Color(173, 235, 173)); 
+            kart.setBackground(new Color(173, 235, 173)); // Açık Yeşil
+        } else if (durum.equals("IPTAL")) {
+            kart.setBackground(new Color(255, 182, 193)); // Açık Kırmızı (İptaller İçin)
         } else {
-            kart.setBackground(new Color(220, 220, 220)); 
+            kart.setBackground(new Color(220, 220, 220)); // Gri (Hazır, Ödendi, Yolda İçin)
         }
 
-        // ==========================================
-        // İSİM BULAMAMA HATASINI ÇÖZEN YENİ MOTOR
-        // ==========================================
         String siparisiAlan = "Bilinmiyor";
         String temizUrunler = html;
         
         try {
-            // HTML etiketlerini geçici olarak silip "saf metin" elde ediyoruz ki kelime ararken takılmasın
             String safMetin = html.replace("<br>", "\n").replaceAll("<[^>]+>", " ");
 
             Matcher mMus = Pattern.compile("Müşteri:\\s*([^\\n]+)").matcher(safMetin);
@@ -239,7 +238,6 @@ public class MutfakModulu extends JPanel {
                 if (!detay.isEmpty() && !masa.contains(detay)) masa += " (" + detay + ")";
             }
 
-            // Sipariş ürünlerinin olduğu kısmı temizleme
             temizUrunler = temizUrunler.replaceAll("(?i)(<[^>]+>)?\\[\\d{2}:\\d{2}\\].*?(?:<br>|\\n)", "");
             temizUrunler = temizUrunler.replaceAll("(?i)(<[^>]+>)?(Siparişi Alan:|Müşteri:|Tarih:|Adres:|Not:).*?(?:<br>|\\n)", "");
             
@@ -256,7 +254,6 @@ public class MutfakModulu extends JPanel {
             temizUrunler = "İçerik Yüklenemedi.";
         }
 
-        // KARTIN SOL KISMI
         JPanel pnlSolBilgi = new JPanel(new BorderLayout(0, 5));
         pnlSolBilgi.setOpaque(false);
         
@@ -277,20 +274,29 @@ public class MutfakModulu extends JPanel {
         
         pnlSolBilgi.add(pnlIcerikWrapper, BorderLayout.CENTER);
 
-        // KARTIN SAĞ KISMI
         JPanel pnlSagBilgi = new JPanel(new GridLayout(3, 1));
         pnlSagBilgi.setOpaque(false);
         pnlSagBilgi.setPreferredSize(new Dimension(250, 0));
         
-        String gorselDurum = durum.equals("YENI") || durum.equals("BEKLEMEDE") ? "Sıraya Alındı / Bekliyor" : 
-                             durum.equals("HAZIRLANIYOR") ? "Hazırlanıyor" : "Tamamlandı";
+        // DURUMLAR ÇOĞALTILDI
+        String gorselDurum = "Bilinmiyor";
+        switch(durum) {
+            case "YENI":
+            case "BEKLEMEDE": gorselDurum = "Sıraya Alındı / Bekliyor"; break;
+            case "HAZIRLANIYOR": gorselDurum = "Hazırlanıyor"; break;
+            case "HAZIR": gorselDurum = "Hazır (Kasa/Garson Bekliyor)"; break;
+            case "ODENDI": gorselDurum = "Teslim Edildi / Ödendi"; break;
+            case "YOLA_CIKTI": gorselDurum = "Kuryede / Yolda"; break;
+            case "IPTAL": gorselDurum = "İptal Edildi"; break;
+            default: gorselDurum = durum;
+        }
                              
         pnlSagBilgi.add(new JLabel("<html><font size='4'><b>Durum:</b> " + gorselDurum + "</font></html>"));
         pnlSagBilgi.add(new JLabel("<html><font size='4'><b>Tip:</b> " + masa + "</font></html>"));
         
         JLabel lblZaman = new JLabel("<html><font size='4'><b>Süre:</b> 00:00:00</font></html>");
         
-        if(!durum.equals("HAZIR")) {
+        if(durum.equals("YENI") || durum.equals("BEKLEMEDE") || durum.equals("HAZIRLANIYOR")) {
             zamanEtiketleri.put(lblZaman, tarih); 
         } else {
             lblZaman.setText("<html><font size='4'><b>Süre:</b> Tamamlandı</font></html>");
@@ -304,7 +310,8 @@ public class MutfakModulu extends JPanel {
         MouseAdapter ciftTiklama = new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
-                if (e.getClickCount() == 2 && !durum.equals("HAZIR")) {
+                // Sadece Yeni ve Hazırlanıyor olanlar çift tıklanarak hazır yapılabilir. Ödenmişler ellenemez.
+                if (e.getClickCount() == 2 && !durum.equals("HAZIR") && !durum.equals("ODENDI") && !durum.equals("IPTAL") && !durum.equals("YOLA_CIKTI")) {
                     durumDegistir(id, "HAZIR");
                 }
             }

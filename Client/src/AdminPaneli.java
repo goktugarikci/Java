@@ -22,6 +22,10 @@ public class AdminPaneli extends JFrame {
     private DefaultTableModel zRaporTableModel;
     private JTable zRaporTablo;
     
+    // Masa Yönetimi Değişkenleri
+    private DefaultTableModel masaTableModel;
+    private JTable masaTablo;
+
     // Alt Modüller
     private PersonelYonetimi personelYonetimEkrani;
     private UrunYonetimi urunYonetimEkrani;
@@ -47,6 +51,7 @@ public class AdminPaneli extends JFrame {
         // Sayfaları CardLayout'a Ekle
         icerikPaneli.add(dashboardSayfasiOlustur(), "Dashboard");
         icerikPaneli.add(zRaporlariSayfasiOlustur(), "ZRaporlari");
+        icerikPaneli.add(masaYonetimSayfasiOlustur(), "MasaYonetimi"); // YENİ EKLENEN
         icerikPaneli.add(personelYonetimEkrani, "PersonelYonetimi");
         icerikPaneli.add(urunYonetimEkrani, "UrunYonetimi");
 
@@ -106,6 +111,8 @@ public class AdminPaneli extends JFrame {
         solMenu.add(Box.createVerticalStrut(10));
         solMenu.add(menuButonuOlustur("📁 Geçmiş Z Raporları", "ZRaporlari"));
         solMenu.add(Box.createVerticalStrut(10));
+        solMenu.add(menuButonuOlustur("🪑 Masa Yönetimi", "MasaYonetimi")); // YENİ EKLENEN BUTON
+        solMenu.add(Box.createVerticalStrut(10));
         solMenu.add(menuButonuOlustur("👥 Personel Yönetimi", "PersonelYonetimi"));
         solMenu.add(Box.createVerticalStrut(10));
         solMenu.add(menuButonuOlustur("🍔 Ürün & Menü Yönetimi", "UrunYonetimi"));
@@ -125,11 +132,114 @@ public class AdminPaneli extends JFrame {
             cardLayout.show(icerikPaneli, cardName);
             if(cardName.equals("Dashboard")) verileriGuncelle();
             if(cardName.equals("ZRaporlari")) zRaporlariniYenile();
+            if(cardName.equals("MasaYonetimi")) masalariYenile(); // TIKLANDIĞINDA MASALARI YÜKLER
             if(cardName.equals("PersonelYonetimi")) personelYonetimEkrani.verileriYenile();
             if(cardName.equals("UrunYonetimi")) urunYonetimEkrani.verileriYenile();
         });
         return btn;
     }
+
+    // ==========================================
+    // YENİ: MASA YÖNETİM SAYFASI
+    // ==========================================
+    private JPanel masaYonetimSayfasiOlustur() {
+        JPanel pnlMain = new JPanel(new BorderLayout(15, 15));
+        pnlMain.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+
+        // Üst Kısım: Ekleme/Silme Formu
+        JPanel pnlUst = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 10));
+        pnlUst.setBorder(BorderFactory.createTitledBorder("Yeni Masa Ekle / Sil"));
+
+        JTextField txtMasaAdi = new JTextField(15);
+        txtMasaAdi.setFont(new Font("Arial", Font.BOLD, 14));
+
+        JButton btnEkle = new JButton("➕ Masa Ekle");
+        btnEkle.setBackground(new Color(39, 174, 96));
+        btnEkle.setForeground(Color.WHITE);
+        btnEkle.setFont(new Font("Arial", Font.BOLD, 14));
+
+        JButton btnSil = new JButton("❌ Seçili Masayı Sil");
+        btnSil.setBackground(new Color(192, 57, 43));
+        btnSil.setForeground(Color.WHITE);
+        btnSil.setFont(new Font("Arial", Font.BOLD, 14));
+
+        pnlUst.add(new JLabel("Masa Adı (Örn: Bahçe-1):"));
+        pnlUst.add(txtMasaAdi);
+        pnlUst.add(btnEkle);
+        pnlUst.add(btnSil);
+
+        // Orta Kısım: Masa Tablosu
+        masaTableModel = new DefaultTableModel(new String[]{"Masa Adı", "Anlık Durumu"}, 0) {
+            @Override public boolean isCellEditable(int row, int column) { return false; }
+        };
+        masaTablo = new JTable(masaTableModel);
+        masaTablo.setRowHeight(35);
+        masaTablo.setFont(new Font("Arial", Font.PLAIN, 15));
+        
+        // Tablo Sütun Boyut Ayarları
+        masaTablo.getColumnModel().getColumn(0).setPreferredWidth(300);
+        masaTablo.getColumnModel().getColumn(1).setPreferredWidth(150);
+
+        pnlMain.add(pnlUst, BorderLayout.NORTH);
+        pnlMain.add(new JScrollPane(masaTablo), BorderLayout.CENTER);
+
+        // Aksiyonlar
+        btnEkle.addActionListener(e -> {
+            String mAdi = txtMasaAdi.getText().trim();
+            if (mAdi.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Lütfen bir masa adı girin!", "Hata", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            String cvp = sunucuyaKomutGonderVeCevapAl("MASA_EKLE|" + mAdi);
+            JOptionPane.showMessageDialog(this, cvp);
+            txtMasaAdi.setText("");
+            masalariYenile(); // Tabloyu anında güncelle
+        });
+
+        btnSil.addActionListener(e -> {
+            int row = masaTablo.getSelectedRow();
+            if (row == -1) {
+                JOptionPane.showMessageDialog(this, "Lütfen silinecek masayı aşağıdaki listeden seçin!", "Uyarı", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            String mAdi = masaTableModel.getValueAt(row, 0).toString();
+            String durum = masaTableModel.getValueAt(row, 1).toString();
+
+            if (!durum.equals("BOS")) {
+                JOptionPane.showMessageDialog(this, "Sadece 'BOS' durumundaki masalar silinebilir. İçinde oturan müşteri varsa lütfen önce hesabı kapatın.", "İşlem Reddedildi", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            int onay = JOptionPane.showConfirmDialog(this, "'" + mAdi + "' isimli masa sistemden tamamen silinecek. Emin misiniz?", "Silme Onayı", JOptionPane.YES_NO_OPTION);
+            if (onay == JOptionPane.YES_OPTION) {
+                String cvp = sunucuyaKomutGonderVeCevapAl("MASA_SIL|" + mAdi);
+                JOptionPane.showMessageDialog(this, cvp);
+                masalariYenile(); // Tabloyu anında güncelle
+            }
+        });
+
+        return pnlMain;
+    }
+
+    private void masalariYenile() {
+        new Thread(() -> {
+            String cvp = sunucuyaKomutGonderVeCevapAl("MASALARI_GETIR");
+            SwingUtilities.invokeLater(() -> {
+                masaTableModel.setRowCount(0);
+                if (cvp != null && cvp.startsWith("MASA_LISTESI|") && cvp.length() > 13) {
+                    String[] masalar = cvp.substring(13).split("\\|");
+                    for (String m : masalar) {
+                        if (m.trim().isEmpty()) continue;
+                        String[] d = m.split(";");
+                        if (d.length >= 2) {
+                            masaTableModel.addRow(new Object[]{d[0], d[1]});
+                        }
+                    }
+                }
+            });
+        }).start();
+    }
+    // ==========================================
 
     private JPanel dashboardSayfasiOlustur() {
         JPanel pnlMain = new JPanel(new BorderLayout(20, 20));
@@ -244,12 +354,8 @@ public class AdminPaneli extends JFrame {
         return pnlMain;
     }
 
-    // ==========================================
-    // AKILLI CİRO AYIKLAYICI (YENİ VE GÜÇLÜ SÜRÜM)
-    // ==========================================
     private double ciroAyikla(String html) {
-        // 1. YENİ SİSTEM: Fişin içindeki gizli etiketini arar
-        int pStart = html.indexOf("<!--CIRO:");
+        int pStart = html.indexOf("<!--PRICE");
         if (pStart != -1) {
             int pEnd = html.indexOf("-->", pStart);
             if (pEnd != -1) {
@@ -260,13 +366,10 @@ public class AdminPaneli extends JFrame {
             }
         }
         
-        // 2. ESKİ SİSTEM: Eğer gizli etiket yoksa "TL" yazısından önceki sayıyı (Genel Toplamı) Regex ile bulur
         try {
             Pattern pattern = Pattern.compile("([0-9]+[.,]?[0-9]*)\\s*TL");
             Matcher matcher = pattern.matcher(html);
             String sonBulunanTutar = "0.0";
-            
-            // Fişin en altındaki "Toplam" tutarını bulana kadar tarar
             while (matcher.find()) {
                 sonBulunanTutar = matcher.group(1); 
             }
@@ -282,7 +385,6 @@ public class AdminPaneli extends JFrame {
             double gunlukCiro = 0.0;
             int gunlukSiparis = 0;
             
-            // Arşivlenmiş (Ödenmiş) fişleri ciro için sayar
             String ciroCvp = sunucuyaKomutGonderVeCevapAl("KASA_GECMIS_GETIR");
             if (ciroCvp != null && ciroCvp.startsWith("KASA_GECMIS_VERI|")) {
                 String[] siparisler = ciroCvp.substring(17).split("\\|\\|\\|");
@@ -291,7 +393,7 @@ public class AdminPaneli extends JFrame {
                     String[] d = s.split("~_~"); 
                     if (d.length >= 5 && d[3].equals("ODENDI")) {
                         gunlukSiparis++;
-                        gunlukCiro += ciroAyikla(d[4]); // Kusursuz ayıklayıcı çalışıyor
+                        gunlukCiro += ciroAyikla(d[4]); 
                     }
                 }
             }
