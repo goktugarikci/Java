@@ -7,6 +7,10 @@ import java.util.Map;
 public class DatabaseManager {
     private static final String URL = "jdbc:sqlite:uygulama_veritabani.db";
 
+    private static Connection connect() throws SQLException {
+        return DriverManager.getConnection(URL);
+    }
+
     // ==========================================
     // 1. VERİTABANI VE TABLO KURULUMU
     // ==========================================
@@ -120,7 +124,17 @@ public class DatabaseManager {
                     "MasaSayisi INTEGER, " +
                     "MasaDetay TEXT, " +
                     "StokDetay TEXT);");
-
+            stmt.execute("CREATE TABLE IF NOT EXISTS PersonelVardiya ("
+                  + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                  + "personel_adi TEXT,"
+                  + "tarih TEXT,"
+                  + "giris_saati TEXT,"
+                  + "cikis_saati TEXT,"
+                  + "toplam_saat REAL DEFAULT 0,"
+                  + "mesai_saati REAL DEFAULT 0,"
+                  + "hakedis_tl REAL DEFAULT 0,"
+                  + "durum TEXT" // 'AKTIF' veya 'TAMAMLANDI'
+                  + ");");
             // GÜNLÜK SATIŞLAR VE STOK TABLOLARI
             stmt.execute("CREATE TABLE IF NOT EXISTS GunlukSatislar (SatisID INTEGER PRIMARY KEY AUTOINCREMENT, UrunAdi TEXT, Adet INTEGER);");
 
@@ -220,7 +234,138 @@ public class DatabaseManager {
             return "BAŞARILI|Kullanıcı bilgileri güncellendi!";
         } catch (Exception e) { return "HATA|Güncelleme hatası: " + e.getMessage(); }
     }
+    // ==========================================
+    // VARDİYA (GİRİŞ/ÇIKIŞ) VE MESAİ HESAPLAMA METODU
+    // ==========================================
+    public static synchronized String vardiyaIslem(String islemTipi, String personelAdi) {
+        String tarih = new java.text.SimpleDateFormat("yyyy-MM-dd").format(new java.util.Date());
+        String saat = new java.text.SimpleDateFormat("HH:mm:ss").format(new java.util.Date());
 
+        try (Connection conn = connect()) {
+            if (islemTipi.equals("GIRIS")) {
+                // 1. Zaten aktif bir vardiyası var mı kontrol et
+                String checkSql = "SELECT id FROM PersonelVardiya WHERE personel_adi = ? AND durum = 'AKTIF'";
+                try (PreparedStatement pstmt = conn.prepareStatement(checkSql)) {
+                    pstmt.setString(1, personelAdi);
+                    ResultSet rs = pstmt.executeQuery();
+                    if (rs.next()) return "HATA|Zaten aktif bir vardiyanız bulunuyor!";
+                }
+                
+                // 2. Yeni Vardiya Kaydı Aç
+                String sql = "INSERT INTO PersonelVardiya (personel_adi, tarih, giris_saati, durum) VALUES (?, ?, ?, 'AKTIF')";
+                try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                    pstmt.setString(1, personelAdi);
+                    pstmt.setString(2, tarih);
+                    pstmt.setString(3, saat);
+                    pstmt.executeUpdate();
+                    return "BASARILI|Vardiyanız " + saat + " itibariyle başlatıldı. İyi çalışmalar!";
+                }
+            } 
+            else if (islemTipi.equals("CIKIS")) {
+                // 1. Kapatılacak vardiyayı bul
+                String getSql = "SELECT id, giris_saati FROM PersonelVardiya WHERE personel_adi = ? AND durum = 'AKTIF'";
+                int vId = -1;
+                String girisSaati = "";
+                
+                try (PreparedStatement pstmt = conn.prepareStatement(getSql)) {
+                    pstmt.setString(1, personelAdi);
+                    ResultSet rs = pstmt.executeQuery();
+                    if (rs.next()) {
+                        vId = rs.getInt("id");
+                        girisSaati = rs.getString("giris_saati");
+                    } else {
+                        return "HATA|Kapatılacak aktif bir vardiya bulunamadı!";
+                    }
+                }
+
+                // 2. Süre ve Maaş Hesaplamaları (Saat farkı bulunur)
+                java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("HH:mm:ss");
+                java.util.Date d1 = sdf.parse(girisSaati);
+                java.util.Date d2 = sdf.parse(saat);
+                long farkMs = d2.getTime() - d1.getTime();
+                
+                double toplamSaat = (double) farkMs / (1000 * 60 * 60);
+                if(toplamSaat < 0) toplamSaat += 24; // Gece yarısını geçerse (Örn: 23:00 - 02:00)
+
+                // 8 saat altı normal, üstü fazla mesai kabul edilir
+                double standartSaat = Math.min(toplamSaat, 8.0);
+                double mesaiSaat = Math.max(0, toplamSaat - 8.0);
+                
+                double SAATLIK_UCRET = 100.0; // Restoranınızın saatlik ücretini buraya yazın
+                double hakedis = (standartSaat * SAATLIK_UCRET) + (mesaiSaat * (SAATLIK_UCRET * 1.5));
+
+                // 3. Veritabanını Güncelle
+                String updateSql = "UPDATE PersonelVardiya SET cikis_saati = ?, toplam_saat = ?, mesai_saati = ?, hakedis_tl = ?, durum = 'TAMAMLANDI' WHERE id = ?";
+                try (PreparedStatement pstmt = conn.prepareStatement(updateSql)) {
+                    pstmt.setString(1, saat);
+                    pstmt.setDouble(2, Math.round(toplamSaat * 100.0) / 100.0);
+                    pstmt.setDouble(3, Math.round(mesaiSaat * 100.0) / 100.0);
+                    pstmt.setDouble(4, Math.round(hakedis * 100.0) / 100.0);
+                    pstmt.setInt(5, vId);
+                    pstmt.executeUpdate();
+                    
+                    return "BASARILI|Vardiya Bitirildi!\nToplam Çalışma: " + String.format("%.1f", toplamSaat) + " Saat\nHakediş: " + Math.round(hakedis) + " TL";
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "HATA|Veritabanı hatası: " + e.getMessage();
+        }
+        return "HATA|Geçersiz işlem tipi.";
+    }
+
+    // ==========================================
+    // GÜN SONU / Z RAPORU METODU (NET KÂR HESABI)
+    // ==========================================
+    public static synchronized String gunSonuKapat() {
+        double toplamNakit = 0, toplamKart = 0, toplamGider = 0;
+        String bugunTarih = new java.text.SimpleDateFormat("yyyy-MM-dd").format(new java.util.Date());
+
+        try (Connection conn = connect()) {
+            
+            // 1. KASAYA GİREN PARAYI HESAPLA (Müşteri Satışları)
+            // Sadece başarılı ve o gün ödenmiş siparişler baz alınır
+            String sqlSatis = "SELECT toplam_tutar, odeme_turu FROM Siparisler WHERE durum IN ('ODENDI', 'TESLIM_EDILDI')";
+            try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sqlSatis)) {
+                while (rs.next()) {
+                    double tutar = rs.getDouble("toplam_tutar");
+                    String tur = rs.getString("odeme_turu");
+                    
+                    if (tur != null) {
+                        if (tur.toLowerCase().contains("nakit")) toplamNakit += tutar;
+                        else if (tur.toLowerCase().contains("kart")) toplamKart += tutar;
+                    }
+                }
+            }
+
+            // 2. KASADAN ÇIKAN PARAYI HESAPLA (Personel Maaşları)
+            // O gün vardiyasını kapatmış tüm personelin toplam hakedişi
+            String sqlGider = "SELECT SUM(hakedis_tl) as totalGider FROM PersonelVardiya WHERE durum = 'TAMAMLANDI' AND tarih = ?";
+            try (PreparedStatement pstmt = conn.prepareStatement(sqlGider)) {
+                pstmt.setString(1, bugunTarih);
+                ResultSet rs = pstmt.executeQuery();
+                if (rs.next()) toplamGider = rs.getDouble("totalGider");
+            }
+
+            // 3. MATEMATİKSEL İŞLEMLER
+            double brutCiro = toplamNakit + toplamKart;
+            double netKar = brutCiro - toplamGider;
+
+            // 4. VERİTABANI YENİ GÜNE SIFIRLAMA (Arşivleme)
+            // O günün siparişlerinin durumunu 'GUN_SONU' yaparak ertesi gün kasanın sıfırdan başlamasını sağlar
+            String sqlSifirla = "UPDATE Siparisler SET durum = 'GUN_SONU' WHERE durum IN ('ODENDI', 'TESLIM_EDILDI', 'IPTAL')";
+            try (Statement stmt = conn.createStatement()) {
+                stmt.executeUpdate(sqlSifirla);
+            }
+
+            // İstenilen Format: RAPOR | Brut | Nakit | Kart | Maliyet | Net Kar
+            return "RAPOR|" + brutCiro + "|" + toplamNakit + "|" + toplamKart + "|" + toplamGider + "|" + netKar;
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "HATA|Z Raporu oluşturulamadı: " + e.getMessage();
+        }
+    }
     // ==========================================
     // 3. KATEGORİ İŞLEMLERİ
     // ==========================================

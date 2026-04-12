@@ -254,6 +254,18 @@ public class ClientHandler implements Runnable {
                 case "PERSONEL_SIL":
                     if (parcalar.length >= 2) return DatabaseManager.personelSil(parcalar[1]);
                     return "HATA|Eksik parametre!";
+                //--------------------------------------------------------------------------
+                case "VARDIYA_ISLEM":
+                    // Gelen komut: VARDIYA_ISLEM | GIRIS | Ahmet
+                    if (parcalar.length >= 3) {
+                        String islemTipi = parcalar[1]; // GIRIS veya CIKIS
+                        String personelAdi = parcalar[2];
+                        return DatabaseManager.vardiyaIslem(islemTipi, personelAdi);
+                    }
+                    return "HATA|Eksik vardiya parametresi!";
+
+                case "GUN_SONU_KAPAT":
+                    return DatabaseManager.gunSonuKapat();
                 // ==========================================
                 // BİLİNMEYEN KOMUT
                 // ==========================================

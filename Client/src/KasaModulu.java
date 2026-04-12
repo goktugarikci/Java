@@ -1,5 +1,3 @@
-
-
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
@@ -26,22 +24,35 @@ public class KasaModulu extends JPanel {
         setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
         
         // ==========================================
-        // ÜST BÖLÜM: BAŞLIK VE KURYE HESAP BUTONU
+        // ÜST BÖLÜM: BAŞLIK, KURYE HESAP VE GÜN SONU
         // ==========================================
         JPanel pnlKasaUst = new JPanel(new BorderLayout());
-        JLabel lblBaslik = new JLabel("💳 Kasa, Tahsilat ve Kurye Yönetimi");
+        JLabel lblBaslik = new JLabel("💳 Kasa, Tahsilat ve İşlem Yönetimi");
         lblBaslik.setFont(new Font("Arial", Font.BOLD, 22));
         
-        JButton btnKuryeHesap = new JButton("🛵 Kurye Gün Sonu & Hesap Kesim");
+        JPanel pnlUstSag = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+
+        JButton btnKuryeHesap = new JButton("🛵 Kurye Hesap Kesimi");
         btnKuryeHesap.setBackground(new Color(142, 68, 173)); // Şık bir Mor Tema
         btnKuryeHesap.setForeground(Color.WHITE);
-        btnKuryeHesap.setFont(new Font("Arial", Font.BOLD, 15));
+        btnKuryeHesap.setFont(new Font("Arial", Font.BOLD, 14));
         btnKuryeHesap.setFocusPainted(false);
-        btnKuryeHesap.setPreferredSize(new Dimension(280, 45));
+        btnKuryeHesap.setPreferredSize(new Dimension(200, 45));
         btnKuryeHesap.addActionListener(e -> kuryeHesapEkraniAc());
+
+        JButton btnGunSonu = new JButton("📊 GÜN SONU (Z RAPORU)");
+        btnGunSonu.setBackground(new Color(52, 73, 94)); // Koyu Gri/Lacivert
+        btnGunSonu.setForeground(Color.WHITE);
+        btnGunSonu.setFont(new Font("Arial", Font.BOLD, 14));
+        btnGunSonu.setFocusPainted(false);
+        btnGunSonu.setPreferredSize(new Dimension(220, 45));
+        btnGunSonu.addActionListener(e -> gunSonuIslemi());
         
+        pnlUstSag.add(btnKuryeHesap);
+        pnlUstSag.add(btnGunSonu);
+
         pnlKasaUst.add(lblBaslik, BorderLayout.WEST);
-        pnlKasaUst.add(btnKuryeHesap, BorderLayout.EAST);
+        pnlKasaUst.add(pnlUstSag, BorderLayout.EAST);
         add(pnlKasaUst, BorderLayout.NORTH);
 
         // ==========================================
@@ -118,38 +129,43 @@ public class KasaModulu extends JPanel {
         aktifTablo.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting() && aktifTablo.getSelectedRow() != -1) {
                 gecmisTablo.clearSelection(); 
-                seciliSiparisId = aktifTableModel.getValueAt(aktifTablo.getSelectedRow(), 0).toString();
-                seciliTur = aktifTableModel.getValueAt(aktifTablo.getSelectedRow(), 1).toString();
-                String html = aktifTableModel.getValueAt(aktifTablo.getSelectedRow(), 4).toString();
-                txtFisDetay.setText("<div style='font-family: Arial; padding: 10px;'>" + html + "</div>");
+                int row = aktifTablo.getSelectedRow();
+                seciliSiparisId = aktifTableModel.getValueAt(row, 0).toString();
+                seciliTur = aktifTableModel.getValueAt(row, 1).toString();
+                String mevcutDurum = aktifTableModel.getValueAt(row, 3).toString();
+                String html = aktifTableModel.getValueAt(row, 4).toString();
                 
+                txtFisDetay.setText("<div style='font-family: Arial; padding: 10px;'>" + html + "</div>");
                 guncelSiparisTutari = fiyatiSok(html);
+                
                 lblOdenecekTutar.setText("Toplam Ödenecek Tutar: " + guncelSiparisTutari + " TL");
                 lblOdenecekTutar.setForeground(new Color(192, 57, 43)); 
                 
-                butonlariDuzenle(seciliTur, true); 
+                butonlariDuzenle(seciliTur, true, mevcutDurum); 
             }
         });
 
         gecmisTablo.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting() && gecmisTablo.getSelectedRow() != -1) {
                 aktifTablo.clearSelection(); 
-                seciliSiparisId = gecmisTableModel.getValueAt(gecmisTablo.getSelectedRow(), 0).toString();
-                String html = gecmisTableModel.getValueAt(gecmisTablo.getSelectedRow(), 4).toString();
-                txtFisDetay.setText("<div style='font-family: Arial; padding: 10px; opacity: 0.6;'>" + html + "</div>");
+                int row = gecmisTablo.getSelectedRow();
+                seciliSiparisId = gecmisTableModel.getValueAt(row, 0).toString();
+                String html = gecmisTableModel.getValueAt(row, 4).toString();
                 
+                txtFisDetay.setText("<div style='font-family: Arial; padding: 10px; opacity: 0.6;'>" + html + "</div>");
                 guncelSiparisTutari = fiyatiSok(html);
+                
                 lblOdenecekTutar.setText("Tahsil Edilen Tutar: " + guncelSiparisTutari + " TL");
                 lblOdenecekTutar.setForeground(new Color(39, 174, 96)); 
                 
-                butonlariDuzenle("", false); 
+                butonlariDuzenle("", false, ""); 
             }
         });
 
         tabbedPane.addChangeListener(e -> { 
             aktifTablo.clearSelection(); gecmisTablo.clearSelection(); txtFisDetay.setText(""); 
             lblOdenecekTutar.setText("Lütfen Bir Sipariş Seçin"); lblOdenecekTutar.setForeground(Color.GRAY);
-            guncelSiparisTutari = "0.00"; butonlariDuzenle("", false); 
+            guncelSiparisTutari = "0.00"; butonlariDuzenle("", false, ""); 
         });
 
         // ==========================================
@@ -158,8 +174,8 @@ public class KasaModulu extends JPanel {
         btnYolaCikti.addActionListener(e -> {
             if(seciliSiparisId.isEmpty()) return;
             int row = aktifTablo.getSelectedRow();
-            if (!aktifTableModel.getValueAt(row, 3).toString().equals("HAZIR")) {
-                JOptionPane.showMessageDialog(this, "Sipariş mutfakta 'HAZIR' olmadan kuryeye atanamaz!", "Uyarı", JOptionPane.WARNING_MESSAGE);
+            if (!aktifTableModel.getValueAt(row, 3).toString().equals("HAZIR") && !aktifTableModel.getValueAt(row, 3).toString().equals("BEKLIYOR")) {
+                JOptionPane.showMessageDialog(this, "Sipariş 'HAZIR' olmadan kuryeye atanamaz!", "Uyarı", JOptionPane.WARNING_MESSAGE);
                 return;
             }
             String kuryelerCvp = sunucuyaKomutGonderVeCevapAl("KURYELERI_GETIR");
@@ -186,7 +202,6 @@ public class KasaModulu extends JPanel {
                 pnlUst.add(lblBilgi, BorderLayout.NORTH);
                 pnlUst.add(cbKuryeler, BorderLayout.CENTER);
 
-                // Altta Sipariş (Fiş) Detayı
                 String htmlFis = aktifTableModel.getValueAt(row, 4).toString();
                 JEditorPane txtDetay = new JEditorPane("text/html", "<div style='font-family:Arial; font-size:15px; padding:10px;'>" + htmlFis + "</div>");
                 txtDetay.setEditable(false);
@@ -219,7 +234,77 @@ public class KasaModulu extends JPanel {
     }
 
     // ==========================================
-    // YENİ: KURYE VARDİYA / HESAP KESİM PANELİ
+    // BUTONLARI DİNAMİK DÜZENLEYEN METOT (GÜNCELLENDİ)
+    // ==========================================
+    private void butonlariDuzenle(String tur, boolean aktifMi, String mevcutDurum) {
+        pnlButonlar.removeAll();
+        if (aktifMi) {
+            // 1. DURUM: Sipariş zaten "YOLA_CIKTI" ise Kapatma (Teslim Etme) butonları gelsin
+            if (mevcutDurum.equals("YOLA_CIKTI")) {
+                btnNakit.setText("📦 Paket Teslim Edildi (Nakit)");
+                btnKrediKarti.setText("💳 Paket Teslim Edildi (Kart)");
+                pnlButonlar.add(btnNakit);
+                pnlButonlar.add(btnKrediKarti);
+                pnlButonlar.add(btnIptal);
+            } 
+            // 2. DURUM: Eve Servis veya Telefon Siparişi ve henüz Yola Çıkmamışsa (HAZIR)
+            else if (tur.contains("Eve") || tur.contains("EVE") || tur.contains("Telefon") || tur.contains("TELEFON")) {
+                btnYolaCikti.setText("🛵 Kurye Seç & Yola Çıkar");
+                pnlButonlar.add(btnYolaCikti);
+                pnlButonlar.add(btnIptal);
+            } 
+            // 3. DURUM: Gel-Al veya Bekleyen Paket Siparişleri
+            else if (tur.contains("Paket") || tur.contains("PAKET") || tur.contains("Müşteri")) {
+                btnNakit.setText("📦 Teslim Et & Nakit Al");
+                btnKrediKarti.setText("📦 Teslim Et & Kart Al");
+                pnlButonlar.add(btnNakit);
+                pnlButonlar.add(btnKrediKarti);
+                pnlButonlar.add(btnIptal);
+            } 
+            // 4. DURUM: Normal Masa Siparişleri
+            else {
+                btnNakit.setText("💵 Nakit Al & Kapat");
+                btnKrediKarti.setText("💳 K.Kartı & Kapat");
+                pnlButonlar.add(btnNakit);
+                pnlButonlar.add(btnKrediKarti);
+                pnlButonlar.add(btnIptal);
+            }
+        }
+        pnlButonlar.revalidate(); 
+        pnlButonlar.repaint();
+    }
+
+    // ==========================================
+    // GÜN SONU / Z RAPORU MANTIĞI
+    // ==========================================
+    private void gunSonuIslemi() {
+        int onay = JOptionPane.showConfirmDialog(this, 
+            "Gün sonu raporu kesilecek, vardiyalar kapatılacak ve sistem yeni güne sıfırlanacaktır.\nOnaylıyor musunuz?", 
+            "Z Raporu Onayı", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+
+        if (onay == JOptionPane.YES_OPTION) {
+            String rapor = sunucuyaKomutGonderVeCevapAl("GUN_SONU_KAPAT");
+            if (rapor != null && rapor.startsWith("RAPOR|")) {
+                String[] r = rapor.split("\\|"); // RAPOR | ToplamSatış | Nakit | Kart | PersonelMaliyeti | NetKâr
+                String mesaj = "<html><body style='width:350px; font-family:Arial; padding:10px;'>" +
+                               "<h2 style='color:#2c3e50; border-bottom:1px solid #ccc;'>🏁 GÜNLÜK KAPANIŞ ÖZETİ (Z)</h2>" +
+                               "<font size='4'><b>Brüt Satış:</b> " + fiyatiSok(r[1]) + " TL</font><br><br>" +
+                               "<b>Tahsil Edilen Nakit:</b> <font color='green'>" + fiyatiSok(r[2]) + " TL</font><br>" +
+                               "<b>Tahsil Edilen Kart (POS):</b> <font color='blue'>" + fiyatiSok(r[3]) + " TL</font><br><hr>" +
+                               "<b>Personel / Vardiya Yükü:</b> <font color='red'>-" + fiyatiSok(r[4]) + " TL</font><br>" +
+                               "<b>Tahmini Net Kâr:</b> <font color='#27ae60'><b>" + fiyatiSok(r[5]) + " TL</b></font><br><br>" +
+                               "<i style='color:#7f8c8d;'>Yeni iş gününe geçiş yapıldı. Muhasebe kayıtları oluşturuldu.</i></body></html>";
+                               
+                JOptionPane.showMessageDialog(this, mesaj, "Gün Sonu Raporu", JOptionPane.INFORMATION_MESSAGE);
+                verileriYenile();
+            } else {
+                JOptionPane.showMessageDialog(this, "Gün sonu alınırken sistem yanıt vermedi veya hata oluştu.\nDetay: " + rapor, "Hata", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
+    // ==========================================
+    // KURYE HESAP EKRANI
     // ==========================================
     private void kuryeHesapEkraniAc() {
         String kuryelerCvp = sunucuyaKomutGonderVeCevapAl("KURYELERI_GETIR");
@@ -230,14 +315,13 @@ public class KasaModulu extends JPanel {
             String[] kuryeListesi = new String[split.length - 1];
             System.arraycopy(split, 1, kuryeListesi, 0, split.length - 1);
             
-            String secilenKurye = (String) JOptionPane.showInputDialog(this, "Günlük hesabı (Vardiya Özeti) görüntülenecek kuryeyi seçin:", 
+            String secilenKurye = (String) JOptionPane.showInputDialog(this, "Günlük hesabı görüntülenecek kuryeyi seçin:", 
                                   "Kurye Hesap Kesimi", JOptionPane.QUESTION_MESSAGE, null, kuryeListesi, kuryeListesi[0]);
                                   
             if (secilenKurye != null) {
                 String hesapCvp = sunucuyaKomutGonderVeCevapAl("KURYE_HESAP_GETIR|" + secilenKurye);
                 if (hesapCvp != null && hesapCvp.startsWith("KURYE_HESAP|")) {
                     String[] h = hesapCvp.split("\\|");
-                    
                     String msg = "<html><div style='width:350px; font-family:Arial;'>" +
                                  "<h2 style='color:#8e44ad; border-bottom: 2px solid #ccc;'>🛵 " + secilenKurye + " - Bugünün Özeti</h2>" +
                                  "<font size='4'><b>Teslim Edilen Sipariş:</b> " + h[1] + " Adet</font><br><br>" +
@@ -246,8 +330,7 @@ public class KasaModulu extends JPanel {
                                  "<h3 style='color:#333;'>Son Teslimat Geçmişi:</h3>" +
                                  "<div style='font-size:12px; color:#555;'>" + h[4] + "</div>" +
                                  "</div></html>";
-                                 
-                    JOptionPane.showMessageDialog(this, msg, "Kurye Vardiya Hesabı", JOptionPane.INFORMATION_MESSAGE);
+                    JOptionPane.showMessageDialog(this, msg, "Kurye Hesabı", JOptionPane.INFORMATION_MESSAGE);
                 }
             }
         } else {
@@ -255,11 +338,8 @@ public class KasaModulu extends JPanel {
         }
     }
 
-    // ==========================================
-    // GÜÇLENDİRİLMİŞ FİYAT OKUMA MOTORU (Hata Düzeltmeleri Eklendi)
-    // ==========================================
     public static String fiyatiSok(String htmlFis) {
-        if (htmlFis == null || htmlFis.isEmpty()) return "0.00";
+        if (htmlFis == null || htmlFis.isEmpty() || htmlFis.equals("null")) return "0.00";
         try {
             Matcher m1 = Pattern.compile("<!\\-\\-PRICE([0-9.,]+)").matcher(htmlFis);
             if (m1.find()) return m1.group(1).replace(",", ".").trim();
@@ -268,29 +348,12 @@ public class KasaModulu extends JPanel {
             if (m2.find()) return m2.group(1).replace(",", ".").trim();
 
             String temizMetin = htmlFis.replaceAll("<[^>]+>", " ").replace("&nbsp;", " ");
-            // (?<!\d) eklentisi sayesinde, fiyat görünümlü adres veya telefon numaralarını pas geçer, sadece TL ile biten gerçek sayıları bulur.
             Matcher m3 = Pattern.compile("(?<!\\d)([0-9]+(?:[.,][0-9]{1,2})?)\\s*(?:TL|₺)", Pattern.CASE_INSENSITIVE).matcher(temizMetin);
             String sonFiyat = "0.00";
             while (m3.find()) sonFiyat = m3.group(1);
             
             return sonFiyat.replace(",", ".").trim();
         } catch (Exception e) { return "0.00"; }
-    }
-
-    private void butonlariDuzenle(String tur, boolean aktifMi) {
-        pnlButonlar.removeAll();
-        if (aktifMi) {
-            if (tur.contains("Eve") || tur.contains("EVE")) {
-                btnYolaCikti.setText("🛵 Kurye Seç & Yola Çıkar"); pnlButonlar.add(btnYolaCikti); pnlButonlar.add(btnIptal);
-            } else if (tur.contains("Paket") || tur.contains("PAKET")) {
-                btnNakit.setText("📦 Teslim Et & Nakit Al"); btnKrediKarti.setText("📦 Teslim Et & Kart Al");
-                pnlButonlar.add(btnNakit); pnlButonlar.add(btnKrediKarti); pnlButonlar.add(btnIptal);
-            } else {
-                btnNakit.setText("💵 Nakit Al & Kapat"); btnKrediKarti.setText("💳 K.Kartı & Kapat");
-                pnlButonlar.add(btnNakit); pnlButonlar.add(btnKrediKarti); pnlButonlar.add(btnIptal);
-            }
-        }
-        pnlButonlar.revalidate(); pnlButonlar.repaint();
     }
 
     public void verileriYenile() {
@@ -324,14 +387,19 @@ public class KasaModulu extends JPanel {
             });
         }).start();
         
-        txtFisDetay.setText(""); lblOdenecekTutar.setText("Lütfen Bir Sipariş Seçin"); lblOdenecekTutar.setForeground(Color.GRAY); butonlariDuzenle("", false);
+        txtFisDetay.setText(""); lblOdenecekTutar.setText("Lütfen Bir Sipariş Seçin"); lblOdenecekTutar.setForeground(Color.GRAY); butonlariDuzenle("", false, "");
     }
 
     private void durumGuncelle(String yeniDurum) {
         if(seciliSiparisId.isEmpty()) return;
         if(JOptionPane.showConfirmDialog(this, "Bu siparişi iptal etmek istediğinize emin misiniz?", "Onay", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) {
             JOptionPane.showMessageDialog(this, sunucuyaKomutGonderVeCevapAl("SIPARIS_DURUM_GUNCELLE|" + seciliSiparisId + "|" + yeniDurum));
-            if ((yeniDurum.equals("IPTAL") || yeniDurum.equals("YOLA_CIKTI")) && !seciliTur.contains("Müşteri")) masayiSifirla(seciliTur);
+            
+            // Eğer sipariş iptal olduysa ve normal bir masaysa (Telefon vs. değilse) masayı sıfırla
+            if ((yeniDurum.equals("IPTAL") || yeniDurum.equals("YOLA_CIKTI")) && 
+                !seciliTur.contains("Müşteri") && !seciliTur.contains("Telefon") && !seciliTur.contains("Eve")) {
+                masayiSifirla(seciliTur);
+            }
             verileriYenile();
         }
     }
@@ -340,7 +408,11 @@ public class KasaModulu extends JPanel {
         if(seciliSiparisId.isEmpty()) return;
         if (JOptionPane.showConfirmDialog(this, "Toplam " + guncelSiparisTutari + " TL " + odemeTuru + " olarak tahsil edilecek.\nOnaylıyor musunuz?", "Ödeme Onayı", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) {
             JOptionPane.showMessageDialog(this, sunucuyaKomutGonderVeCevapAl("SIPARIS_ODEME_AL|" + seciliSiparisId + "|" + odemeTuru + "|" + guncelSiparisTutari));
-            if (!seciliTur.contains("Müşteri")) masayiSifirla(seciliTur); 
+            
+            // Ödeme alındıktan sonra eğer normal bir masaysa sıfırla
+            if (!seciliTur.contains("Müşteri") && !seciliTur.contains("Telefon") && !seciliTur.contains("Eve")) {
+                masayiSifirla(seciliTur); 
+            }
             verileriYenile();
         }
     }

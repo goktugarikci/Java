@@ -177,7 +177,27 @@ public class PersonelPaneli extends JFrame {
             siparisEkrani.baslat(); // Sipariş Modülünü canlı olarak yeniden çizer
         }
     }
-
+    // Personelin o günkü vardiya durumunu kontrol eden basit bir mantık
+    private void vardiyaIslemi(String personelAdi) {
+        String mevcutDurum = sunucuyaKomutGonderVeCevapAl("PERSONEL_DURUM_SOR|" + personelAdi);
+        
+        if (mevcutDurum.equals("YOK")) {
+            // Vardiya Başlatma
+            int onay = JOptionPane.showConfirmDialog(this, "Vardiyanızı başlatmak istiyor musunuz?", "Vardiya Giriş", JOptionPane.YES_NO_OPTION);
+            if (onay == JOptionPane.YES_OPTION) {
+                String cevap = sunucuyaKomutGonderVeCevapAl("VARDIYA_BASLAT|" + personelAdi);
+                JOptionPane.showMessageDialog(this, "Giriş yapıldı: " + cevap);
+            }
+        } else {
+            // Vardiya Bitirme ve Hesaplama
+            int onay = JOptionPane.showConfirmDialog(this, "Vardiyanızı bitirmek istiyor musunuz?", "Vardiya Çıkış", JOptionPane.YES_NO_OPTION);
+            if (onay == JOptionPane.YES_OPTION) {
+                String rapor = sunucuyaKomutGonderVeCevapAl("VARDIYA_BITIR|" + personelAdi);
+                // Örn: "8 Saat Standart + 2 Saat Mesai Kaydedildi."
+                JOptionPane.showMessageDialog(this, "Vardiya Özeti:\n" + rapor);
+            }
+        }
+    }
     // Tüm modüllerin ortak kullandığı Sunucu İstek Metodu
     public String sunucuyaKomutGonderVeCevapAl(String komut) {
         try (Socket s = new Socket("localhost", 8080); 
