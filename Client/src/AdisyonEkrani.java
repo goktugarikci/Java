@@ -1,4 +1,3 @@
-
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
@@ -31,14 +30,18 @@ public class AdisyonEkrani extends JDialog {
         setLocationRelativeTo(anaPanel);
 
         // ==========================================
-        // 1. ÖNCEKİ SİPARİŞLERİ (EK SİPARİŞSE) YÜKLEME
+        // 1. ÖNCEKİ SİPARİŞLERİ (EK SİPARİŞSE) YÜKLEME VE BİRLEŞİK FİŞ OKUMA
         // ==========================================
         gecerliOncekiTutar = 0.0; 
         String oncekiMusteriIsmi = ""; 
         StringBuilder oncekiSiparisHTML = new StringBuilder();
         
-        boolean ekSiparisMi = siparisTuru.equals("MASA") && siparisModulu != null && !siparisModulu.getMasaDurumlari().getOrDefault(baslikIsmi, "BOS").equals("BOS");
-
+// AdisyonEkrani.java içindeki kontrolü şu şekilde güncelleyin:
+        
+        // Sadece MASA ise ve mutfak henüz onaylamadıysa ek sipariş olarak gör
+        boolean ekSiparisMi = siparisTuru.equals("MASA") && 
+                              siparisModulu != null && 
+                              !siparisModulu.getMasaDurumlari().getOrDefault(baslikIsmi, "BOS").equals("BOS");
         if (ekSiparisMi) {
             String cevap = anaPanel.sunucuyaKomutGonderVeCevapAl("KASA_SIPARIS_GETIR");
             if (cevap != null && cevap.startsWith("KASA_VERI|") && cevap.length() > 10) {
@@ -52,11 +55,13 @@ public class AdisyonEkrani extends JDialog {
                         oncekiSiparisHTML.append("<div style='border-bottom: 1px dashed #ccc; padding-bottom: 5px; margin-bottom: 5px;'>")
                                          .append(html).append("</div>");
                         
-                        // Fiyatı eski fişten çekip önceki tutara ekliyoruz
-                        java.util.regex.Matcher m = java.util.regex.Pattern.compile("<!\\-\\-PRICE([0-9.,]+)").matcher(html);
-                        if (m.find()) {
-                            gecerliOncekiTutar += guvenliDoubleCevir(m.group(1));
+                        // Birleştirilmiş Genel Toplamı Regex ile güvenli şekilde oku
+                        java.util.regex.Matcher m = java.util.regex.Pattern.compile("Genel Toplam:.*?([0-9]+[.,][0-9]{1,2})").matcher(html);
+                        String sonFiyat = "0.0";
+                        while(m.find()) {
+                            sonFiyat = m.group(1);
                         }
+                        gecerliOncekiTutar = guvenliDoubleCevir(sonFiyat);
                     }
                 }
             }
@@ -98,12 +103,11 @@ public class AdisyonEkrani extends JDialog {
         add(pnlMusteriBilgi, BorderLayout.NORTH);
 
         // ==========================================
-        // 3. ORTA BÖLÜM: ÜRÜNLER VE SEPET (SPLIT PANE)
+        // 3. ORTA BÖLÜM: ÜRÜNLER VE SEPET
         // ==========================================
         JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT); 
         split.setDividerLocation(700);
 
-        // SOL: KATEGORİLER VE ÜRÜNLER
         JPanel pnlUrunler = new JPanel(new BorderLayout());
         JPanel pnlKategoriler = new JPanel(new GridLayout(0, 1, 5, 5)); 
         pnlKategoriler.setBackground(new Color(52, 73, 94)); 
@@ -142,7 +146,6 @@ public class AdisyonEkrani extends JDialog {
         pnlUrunler.add(scrollKategori, BorderLayout.WEST); 
         pnlUrunler.add(new JScrollPane(pnlUrunListesi), BorderLayout.CENTER);
 
-        // SAĞ: SEPET VE GEÇMİŞ SİPARİŞLER
         JPanel pnlSepet = new JPanel(new BorderLayout(5, 5)); 
         pnlSepet.setBorder(BorderFactory.createTitledBorder("Adisyon (Sepet)"));
         
@@ -155,7 +158,7 @@ public class AdisyonEkrani extends JDialog {
             
             JScrollPane scrollEski = new JScrollPane(txtEski); 
             scrollEski.setPreferredSize(new Dimension(0, 200)); 
-            scrollEski.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.GRAY), "Daha Önce Söylenenler (Mevcut Borç: " + gecerliOncekiTutar + " TL)"));
+            scrollEski.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.GRAY), "Masadaki Mevcut Siparişler (Mevcut Borç: " + gecerliOncekiTutar + " TL)"));
             pnlSepet.add(scrollEski, BorderLayout.NORTH);
         }
 
@@ -172,7 +175,7 @@ public class AdisyonEkrani extends JDialog {
         lblToplamTutar.setFont(new Font("Arial", Font.BOLD, 14)); 
         hesaplaToplam(); 
 
-        JButton btnMutfagaGonder = new JButton("Yeni Siparişi Mutfağa Gönder"); 
+        JButton btnMutfagaGonder = new JButton("Siparişi Mutfağa Gönder"); 
         btnMutfagaGonder.setBackground(new Color(39, 174, 96)); 
         btnMutfagaGonder.setForeground(Color.WHITE); 
         btnMutfagaGonder.setFont(new Font("Arial", Font.BOLD, 15));
@@ -230,22 +233,13 @@ public class AdisyonEkrani extends JDialog {
                 }
             }
             
-            // ==========================================
-            // YENİ EKLENEN KISIM: FİYATI FİŞE YAZDIRMAK
-            // ==========================================
             double genelToplam = gecerliOncekiTutar + toplamTutar;
             String formatliToplam = String.format(java.util.Locale.US, "%.2f", genelToplam);
             
-            // 1. Kasiyer ve Müşteri için Görsel Tutar (Fişin en altına eklenir)
             fis.append("<hr><div style='text-align: right; font-size: 15px;'>");
             fis.append("<b>Genel Toplam: <span style='color:red;'>").append(formatliToplam).append(" TL</span></b>");
             fis.append("</div>");
-            
-            // 2. Kasa modülünün arkada okuyabilmesi için Gizli Tutar Etiketi
-            fis.append("");
-            
             fis.append("</html>");
-            // ==========================================
             
             String gonderilecekStokDatasi = stokDusecekListe.length() > 0 ? stokDusecekListe.substring(0, stokDusecekListe.length() - 1) : "null";
             anaPanel.sunucuyaKomutGonderVeCevapAl("SIPARIS_OLUSTUR|" + baslikIsmi + "|" + musteriAdi + "|" + fis.toString() + "|" + gonderilecekStokDatasi);

@@ -263,7 +263,23 @@ public class ClientHandler implements Runnable {
                         return DatabaseManager.vardiyaIslem(islemTipi, personelAdi);
                     }
                     return "HATA|Eksik vardiya parametresi!";
-
+                case "KURYE_TAKIP_SIPARIS_GETIR":
+                    if (parcalar.length >= 2) return DatabaseManager.kuryeTakipSiparisleriGetir(parcalar[1]);
+                    return "HATA|Eksik parametre!";
+                    
+                case "KURYE_TOPLU_YOLA_CIKAR":
+                    if (parcalar.length >= 2) return DatabaseManager.kuryeTopluYolaCikar(parcalar[1]);
+                    return "HATA|Eksik parametre!";
+                    
+                case "KURYE_MERKEZE_DONDU":
+                    if (parcalar.length >= 2) return DatabaseManager.kuryeMerkezeDondu(parcalar[1]);
+                    return "HATA|Eksik parametre!";
+                case "TUM_AYARLARI_GETIR":
+                    return DatabaseManager.tumAyarlariGetir();
+                    
+                case "FİS_AYAR_GUNCELLE":
+                    if (parcalar.length >= 5) return DatabaseManager.ayarGuncelle(parcalar[1], parcalar[2], parcalar[3], parcalar[4]);
+                    return "HATA|Eksik ayar parametresi!";
                 case "GUN_SONU_KAPAT":
                     return DatabaseManager.gunSonuKapat();
                 // ==========================================

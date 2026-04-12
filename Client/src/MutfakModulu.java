@@ -1,4 +1,3 @@
-
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
@@ -85,14 +84,18 @@ public class MutfakModulu extends JPanel {
         add(pnlUstBar, BorderLayout.NORTH);
 
         // ==========================================
-        // 2. İÇERİK ALANI
+        // 2. İÇERİK ALANI (KAYDIRILABİLİR LİSTE)
         // ==========================================
         pnlSiparisler = new JPanel();
         pnlSiparisler.setLayout(new BoxLayout(pnlSiparisler, BoxLayout.Y_AXIS));
         pnlSiparisler.setBackground(new Color(236, 240, 241)); 
         pnlSiparisler.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
         
-        JScrollPane scrollPane = new JScrollPane(pnlSiparisler);
+        JPanel siparisWrapper = new JPanel(new BorderLayout());
+        siparisWrapper.setBackground(new Color(236, 240, 241));
+        siparisWrapper.add(pnlSiparisler, BorderLayout.NORTH);
+
+        JScrollPane scrollPane = new JScrollPane(siparisWrapper);
         scrollPane.getVerticalScrollBar().setUnitIncrement(16);
         scrollPane.setBorder(null);
         
@@ -125,8 +128,9 @@ public class MutfakModulu extends JPanel {
                 zamanEtiketleri.clear();
 
                 if (cvp != null && cvp.startsWith("MUTFAK_FULL_VERI|")) {
-                    if (!cvp.equals("MUTFAK_FULL_VERI|BOS")) {
-                        String[] siparisler = cvp.substring(17).split("\\|\\|\\|");
+                    String data = cvp.substring(17);
+                    if (!data.isEmpty() && !data.equals("BOS")) {
+                        String[] siparisler = data.split("\\|\\|\\|");
                         Set<String> guncelIdler = new HashSet<>();
                         boolean yeniSiparisVar = false;
 
@@ -142,7 +146,6 @@ public class MutfakModulu extends JPanel {
                                     yeniSiparisVar = true;
                                 }
 
-                                // KRİTİK YENİ MANTIK: Geçmiş siparişler artık Ödendi, İptal ve Yolda Olanları da kapsar!
                                 boolean isGecmis = durum.equals("HAZIR") || durum.equals("ODENDI") || durum.equals("IPTAL") || durum.equals("YOLA_CIKTI");
                                 
                                 if (aktifSekme.equals("AKTIF") && !isGecmis) {
@@ -165,7 +168,7 @@ public class MutfakModulu extends JPanel {
                         gosterBosMesaj("Bu sekmede gösterilecek sipariş bulunamadı.");
                     }
                 } else {
-                    gosterBosMesaj("<html><font color='red'>Sunucuya Bağlanılamadı!</font></html>");
+                    gosterBosMesaj("<html><font color='red'>Sunucu Hatası veya Bağlantı Yok!</font></html>");
                 }
                 
                 pnlSiparisler.revalidate();
@@ -178,161 +181,134 @@ public class MutfakModulu extends JPanel {
         JLabel lblBos = new JLabel(msj);
         lblBos.setFont(new Font("Arial", Font.BOLD, 18));
         lblBos.setForeground(Color.DARK_GRAY);
+        lblBos.setAlignmentX(Component.CENTER_ALIGNMENT);
         pnlSiparisler.add(lblBos);
     }
 
     private void yeniSiparisBildirimi() {
         uyariEkraniAcik = true;
         Toolkit.getDefaultToolkit().beep(); 
-        
         new Thread(() -> {
-            JOptionPane.showOptionDialog(this, "Mutfak panosuna yeni bir sipariş düştü!", "🔔 YENİ SİPARİŞ",
-                JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE, null, 
-                new Object[]{"Siparişi Gördüm"}, "Siparişi Gördüm");
-            
+            JOptionPane.showMessageDialog(this, "Mutfak panosuna yeni bir sipariş düştü!", "🔔 YENİ SİPARİŞ", JOptionPane.WARNING_MESSAGE);
             uyariEkraniAcik = false; 
             verileriYenile(); 
         }).start();
     }
 
     // ==========================================
-    // 3. TASARIMDAKİ YATAY KART DİZİLİMİ
+    // 3. TAMAMEN AÇIK SABİT SİPARİŞ KARTI (HIZLI ONAY SÜRÜMÜ)
     // ==========================================
     private JPanel siparisKartiOlustur(String id, String masa, String musteri, String html, String durum, String tarih) {
-        JPanel kart = new JPanel(new BorderLayout(15, 10));
-        kart.setMaximumSize(new Dimension(Integer.MAX_VALUE, 150)); 
-        kart.setMinimumSize(new Dimension(600, 150));
+        JPanel kartAna = new JPanel(new BorderLayout(0, 5));
+        kartAna.setAlignmentX(Component.LEFT_ALIGNMENT);
+        kartAna.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE)); 
         
-        kart.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(Color.GRAY, 1, true),
+        Color bgRenk = new Color(250, 250, 250); 
+        if (durum.equals("YENI") || durum.equals("BEKLEMEDE")) bgRenk = new Color(255, 249, 196);
+        else if (durum.equals("HAZIRLANIYOR")) bgRenk = new Color(200, 230, 201);
+        else if (durum.equals("IPTAL")) bgRenk = new Color(255, 205, 210);
+
+        kartAna.setBackground(bgRenk);
+        kartAna.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(Color.GRAY, 2, true),
             BorderFactory.createEmptyBorder(10, 15, 10, 15) 
         ));
 
-        // DURUMLARA GÖRE KART RENKLERİ GÜNCELLENDİ
-        if (durum.equals("YENI") || durum.equals("BEKLEMEDE")) {
-            kart.setBackground(new Color(255, 235, 153)); // Açık Sarı
-        } else if (durum.equals("HAZIRLANIYOR")) {
-            kart.setBackground(new Color(173, 235, 173)); // Açık Yeşil
-        } else if (durum.equals("IPTAL")) {
-            kart.setBackground(new Color(255, 182, 193)); // Açık Kırmızı (İptaller İçin)
-        } else {
-            kart.setBackground(new Color(220, 220, 220)); // Gri (Hazır, Ödendi, Yolda İçin)
-        }
-
+        // --- VERİ TEMİZLEME ---
         String siparisiAlan = "Bilinmiyor";
         String temizUrunler = html;
-        
         try {
             String safMetin = html.replace("<br>", "\n").replaceAll("<[^>]+>", " ");
-
             Matcher mMus = Pattern.compile("Müşteri:\\s*([^\\n]+)").matcher(safMetin);
-            if (mMus.find() && !mMus.group(1).trim().isEmpty()) musteri = mMus.group(1).trim();
-            
+            if (mMus.find()) musteri = mMus.group(1).trim();
             Matcher mAla = Pattern.compile("Siparişi Alan:\\s*([^\\n]+)").matcher(safMetin);
-            if (mAla.find() && !mAla.group(1).trim().isEmpty()) siparisiAlan = mAla.group(1).trim();
-            
-            Matcher mMas = Pattern.compile("(?i)(YENİ MASA|MASA|EVE SERVİS|PAKET|GEL-AL)[\\s\\(]*([^\\n\\)]*)").matcher(safMetin);
-            if (mMas.find()) {
-                masa = mMas.group(1).trim();
-                String detay = mMas.group(2).trim();
-                if (!detay.isEmpty() && !masa.contains(detay)) masa += " (" + detay + ")";
-            }
+            if (mAla.find()) siparisiAlan = mAla.group(1).trim();
+            temizUrunler = html.replaceAll("(?i)<html.*?>|</html>|<body.*?>|</body>", "")
+                               .split("(?i)<!\\-\\-PRICE")[0].replace("<hr>", "").trim();
+        } catch (Exception e) { temizUrunler = "İçerik Hatası"; }
 
-            temizUrunler = temizUrunler.replaceAll("(?i)(<[^>]+>)?\\[\\d{2}:\\d{2}\\].*?(?:<br>|\\n)", "");
-            temizUrunler = temizUrunler.replaceAll("(?i)(<[^>]+>)?(Siparişi Alan:|Müşteri:|Tarih:|Adres:|Not:).*?(?:<br>|\\n)", "");
-            
-            String fiyatEtiketi = "<!" + "--PRICE"; 
-            int fiyatIdx = temizUrunler.indexOf(fiyatEtiketi);
-            if(fiyatIdx != -1) {
-                temizUrunler = temizUrunler.substring(0, fiyatIdx);
-            }
-            
-            temizUrunler = temizUrunler.replace("<hr>", "").replaceAll("(-{3,})", ""); 
-            temizUrunler = temizUrunler.replace("<br><br>", "<br>").trim();
-            if (temizUrunler.startsWith("<br>")) temizUrunler = temizUrunler.substring(4).trim();
-        } catch (Exception e) {
-            temizUrunler = "İçerik Yüklenemedi.";
-        }
+        // --- 1. ÜST PANEL ---
+        JPanel pnlUst = new JPanel(new BorderLayout(10, 10));
+        pnlUst.setOpaque(false);
+        pnlUst.setBorder(BorderFactory.createMatteBorder(0, 0, 2, 0, Color.LIGHT_GRAY));
 
-        JPanel pnlSolBilgi = new JPanel(new BorderLayout(0, 5));
-        pnlSolBilgi.setOpaque(false);
-        
-        JPanel pnlMusteriDetay = new JPanel(new GridLayout(2, 1));
-        pnlMusteriDetay.setOpaque(false);
-        pnlMusteriDetay.add(new JLabel("<html><font size='4'><b>Müşteri:</b> " + musteri + "</font></html>"));
-        pnlMusteriDetay.add(new JLabel("<html><font size='4'><b>Siparişi Alan:</b> " + siparisiAlan + "</font></html>"));
-        pnlSolBilgi.add(pnlMusteriDetay, BorderLayout.NORTH);
-        
-        JPanel pnlIcerikWrapper = new JPanel(new BorderLayout());
-        pnlIcerikWrapper.setOpaque(false);
-        pnlIcerikWrapper.add(new JLabel("<html><font size='4'><b>Sipariş İçeriği:</b></font></html>"), BorderLayout.NORTH);
-        
-        JEditorPane txtUrunler = new JEditorPane("text/html", icerikRenklendir(temizUrunler));
-        txtUrunler.setEditable(false);
-        txtUrunler.setOpaque(false);
-        pnlIcerikWrapper.add(new JScrollPane(txtUrunler), BorderLayout.CENTER);
-        
-        pnlSolBilgi.add(pnlIcerikWrapper, BorderLayout.CENTER);
+        JPanel pnlUstSol = new JPanel(new GridLayout(2, 1));
+        pnlUstSol.setOpaque(false);
+        pnlUstSol.add(new JLabel("<html><font size='5'><b>SİPARİŞ #" + id + " | " + masa + "</b></font></html>"));
+        pnlUstSol.add(new JLabel("<html><font size='4' color='#34495e'>Müşteri: " + musteri + " | Garson: " + siparisiAlan + "</font></html>"));
+        pnlUst.add(pnlUstSol, BorderLayout.WEST);
 
-        JPanel pnlSagBilgi = new JPanel(new GridLayout(3, 1));
-        pnlSagBilgi.setOpaque(false);
-        pnlSagBilgi.setPreferredSize(new Dimension(250, 0));
+        // DURUM ETİKET BUTONU
+        JPanel pnlUstSag = new JPanel(new GridLayout(2, 1));
+        pnlUstSag.setOpaque(false);
         
-        // DURUMLAR ÇOĞALTILDI
-        String gorselDurum = "Bilinmiyor";
-        switch(durum) {
-            case "YENI":
-            case "BEKLEMEDE": gorselDurum = "Sıraya Alındı / Bekliyor"; break;
-            case "HAZIRLANIYOR": gorselDurum = "Hazırlanıyor"; break;
-            case "HAZIR": gorselDurum = "Hazır (Kasa/Garson Bekliyor)"; break;
-            case "ODENDI": gorselDurum = "Teslim Edildi / Ödendi"; break;
-            case "YOLA_CIKTI": gorselDurum = "Kuryede / Yolda"; break;
-            case "IPTAL": gorselDurum = "İptal Edildi"; break;
-            default: gorselDurum = durum;
-        }
-                             
-        pnlSagBilgi.add(new JLabel("<html><font size='4'><b>Durum:</b> " + gorselDurum + "</font></html>"));
-        pnlSagBilgi.add(new JLabel("<html><font size='4'><b>Tip:</b> " + masa + "</font></html>"));
+        JButton btnDurum = new JButton("<html><div style='text-align:right;'><b>" + durum + "</b></div></html>");
+        btnDurum.setContentAreaFilled(false);
+        btnDurum.setBorderPainted(false);
+        btnDurum.setFocusPainted(false);
+        btnDurum.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btnDurum.setFont(new Font("Arial", Font.BOLD, 16));
         
-        JLabel lblZaman = new JLabel("<html><font size='4'><b>Süre:</b> 00:00:00</font></html>");
+        if (durum.equals("BEKLEMEDE")) btnDurum.setForeground(new Color(211, 84, 0));
+        else if (durum.equals("HAZIRLANIYOR")) btnDurum.setForeground(new Color(39, 174, 96));
+        else btnDurum.setForeground(Color.BLACK);
+
+        pnlUstSag.add(btnDurum);
         
+        JLabel lblZaman = new JLabel("<html><div style='text-align:right;'><font size='4'><b>Süre:</b> 00:00</font></div></html>");
         if(durum.equals("YENI") || durum.equals("BEKLEMEDE") || durum.equals("HAZIRLANIYOR")) {
             zamanEtiketleri.put(lblZaman, tarih); 
         } else {
-            lblZaman.setText("<html><font size='4'><b>Süre:</b> Tamamlandı</font></html>");
+            lblZaman.setText("<html><div style='text-align:right;'><font size='4'><b>Bitti</b></font></div></html>");
         }
-        
-        pnlSagBilgi.add(lblZaman);
+        pnlUstSag.add(lblZaman);
+        pnlUst.add(pnlUstSag, BorderLayout.EAST);
 
-        kart.add(pnlSolBilgi, BorderLayout.CENTER);
-        kart.add(pnlSagBilgi, BorderLayout.EAST);
+        // --- 2. İÇERİK ---
+        JEditorPane txtUrunler = new JEditorPane("text/html", icerikRenklendir(temizUrunler));
+        txtUrunler.setEditable(false);
+        txtUrunler.setOpaque(false);
 
-        MouseAdapter ciftTiklama = new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent e) {
-                // Sadece Yeni ve Hazırlanıyor olanlar çift tıklanarak hazır yapılabilir. Ödenmişler ellenemez.
-                if (e.getClickCount() == 2 && !durum.equals("HAZIR") && !durum.equals("ODENDI") && !durum.equals("IPTAL") && !durum.equals("YOLA_CIKTI")) {
-                    durumDegistir(id, "HAZIR");
-                }
+        // ==========================================
+        // DÜZELTME: SORU SORMADAN DİREKT ONAYLA
+        // ==========================================
+        Runnable direkOnayla = () -> {
+            if (!durum.equals("HAZIR") && !durum.equals("ODENDI")) {
+                durumDegistir(id, "HAZIR"); // Soru penceresi kaldırıldı!
             }
         };
-        kart.addMouseListener(ciftTiklama);
-        txtUrunler.addMouseListener(ciftTiklama);
 
-        return kart;
+        // Durum yazısına tıklandığında
+        btnDurum.addActionListener(e -> direkOnayla.run());
+
+        // Kartın herhangi bir yerine çift tıklandığında
+        MouseAdapter ciftTik = new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2) direkOnayla.run();
+            }
+        };
+        
+        kartAna.addMouseListener(ciftTik);
+        txtUrunler.addMouseListener(ciftTik);
+        pnlUst.addMouseListener(ciftTik);
+
+        kartAna.add(pnlUst, BorderLayout.NORTH);
+        kartAna.add(txtUrunler, BorderLayout.CENTER);
+
+        return kartAna;
     }
 
     private String icerikRenklendir(String yazi) {
-        yazi = yazi.replaceAll("(?i)(olmasın|çıkart|hariç|yok|soğansız|domatessiz|istemiyor|koyma)", "<span style='color:#c0392b; font-weight:bold;'>$1</span>");
-        yazi = yazi.replaceAll("(?i)(ekstra|bol|fazla|çift|ekle|büyük|ilave)", "<span style='color:#27ae60; font-weight:bold;'>$1</span>");
-        yazi = yazi.replaceAll("(?i)(kola|ayran|su\\b|şalgam|çay|fanta|meyve suyu|sprite|soda)", "<span style='color:#2980b9; font-weight:bold;'>🥤 $1</span>");
-        return "<html><div style='font-family: Arial; font-size: 14px; line-height: 1.2;'>" + yazi + "</div></html>";
+        yazi = yazi.replaceAll("(?i)(olmasın|çıkart|hariç|yok|soğansız|istemiyor)", "<span style='color:red; font-weight:bold;'>$1</span>");
+        yazi = yazi.replaceAll("(?i)(ekstra|bol|fazla|ekle|ilave)", "<span style='color:green; font-weight:bold;'>$1</span>");
+        return "<html><div style='font-family: Arial; font-size: 18px; line-height: 1.5;'>" + yazi + "</div></html>";
     }
 
     private void durumDegistir(String id, String yeni) {
         new Thread(() -> {
             anaPanel.sunucuyaKomutGonderVeCevapAl("SIPARIS_DURUM_GUNCELLE|" + id + "|" + yeni);
-            SwingUtilities.invokeLater(() -> verileriYenile());
+            SwingUtilities.invokeLater(this::verileriYenile);
         }).start();
     }
 
@@ -342,13 +318,10 @@ public class MutfakModulu extends JPanel {
         for (Map.Entry<JLabel, String> e : zamanEtiketleri.entrySet()) {
             try {
                 Date d = sdf.parse(e.getValue());
-                long diff = suan.getTime() - d.getTime();
-                if(diff < 0) diff = 0;
-                long s = (diff / 1000) % 60; long m = (diff / (1000 * 60)) % 60; long h = (diff / (1000 * 60 * 60)) % 24;
-                e.getKey().setText(String.format("<html><font size='4'><b>Süre:</b> %02d:%02d:%02d</font></html>", h, m, s));
-            } catch (Exception ex) { 
-                e.getKey().setText("<html><font size='4'><b>Süre:</b> Bekliyor..</font></html>"); 
-            }
+                long diff = Math.max(0, suan.getTime() - d.getTime());
+                long s = (diff / 1000) % 60; long m = (diff / (1000 * 60)) % 60;
+                e.getKey().setText(String.format("<html><div style='text-align:right;'><font size='4'><b>Süre:</b> %02d:%02d</font></div></html>", m, s));
+            } catch (Exception ex) { e.getKey().setText("..."); }
         }
     }
 }

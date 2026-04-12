@@ -1,5 +1,3 @@
-
-
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
@@ -30,6 +28,9 @@ public class AdminPaneli extends JFrame {
     private PersonelYonetimi personelYonetimEkrani;
     private UrunYonetimi urunYonetimEkrani;
 
+    // Fiş Ayarları Arayüz Elemanları (Anlık Güncelleme İçin)
+    private JTextField txtMagazaAdi, txtOnBilgi, txtAltBilgi, txtVKN;
+
     public AdminPaneli(String adSoyad) {
         this.aktifPersonel = adSoyad;
 
@@ -51,9 +52,12 @@ public class AdminPaneli extends JFrame {
         // Sayfaları CardLayout'a Ekle
         icerikPaneli.add(dashboardSayfasiOlustur(), "Dashboard");
         icerikPaneli.add(zRaporlariSayfasiOlustur(), "ZRaporlari");
-        icerikPaneli.add(masaYonetimSayfasiOlustur(), "MasaYonetimi"); // YENİ EKLENEN
+        icerikPaneli.add(masaYonetimSayfasiOlustur(), "MasaYonetimi"); 
         icerikPaneli.add(personelYonetimEkrani, "PersonelYonetimi");
         icerikPaneli.add(urunYonetimEkrani, "UrunYonetimi");
+        
+        // YENİ EKLENEN: Fiş ve Mağaza Ayarları Sayfası
+        icerikPaneli.add(fisAyarPaneliOlustur(), "FisAyarlari"); 
 
         add(icerikPaneli, BorderLayout.CENTER);
         verileriGuncelle();
@@ -111,11 +115,15 @@ public class AdminPaneli extends JFrame {
         solMenu.add(Box.createVerticalStrut(10));
         solMenu.add(menuButonuOlustur("📁 Geçmiş Z Raporları", "ZRaporlari"));
         solMenu.add(Box.createVerticalStrut(10));
-        solMenu.add(menuButonuOlustur("🪑 Masa Yönetimi", "MasaYonetimi")); // YENİ EKLENEN BUTON
+        solMenu.add(menuButonuOlustur("🪑 Masa Yönetimi", "MasaYonetimi")); 
         solMenu.add(Box.createVerticalStrut(10));
         solMenu.add(menuButonuOlustur("👥 Personel Yönetimi", "PersonelYonetimi"));
         solMenu.add(Box.createVerticalStrut(10));
         solMenu.add(menuButonuOlustur("🍔 Ürün & Menü Yönetimi", "UrunYonetimi"));
+        solMenu.add(Box.createVerticalStrut(10));
+        
+        // YENİ EKLENEN SOL MENÜ BUTONU
+        solMenu.add(menuButonuOlustur("🖨️ Fiş ve Mağaza Ayarları", "FisAyarlari"));
         
         add(solMenu, BorderLayout.WEST);
     }
@@ -132,21 +140,95 @@ public class AdminPaneli extends JFrame {
             cardLayout.show(icerikPaneli, cardName);
             if(cardName.equals("Dashboard")) verileriGuncelle();
             if(cardName.equals("ZRaporlari")) zRaporlariniYenile();
-            if(cardName.equals("MasaYonetimi")) masalariYenile(); // TIKLANDIĞINDA MASALARI YÜKLER
+            if(cardName.equals("MasaYonetimi")) masalariYenile(); 
             if(cardName.equals("PersonelYonetimi")) personelYonetimEkrani.verileriYenile();
             if(cardName.equals("UrunYonetimi")) urunYonetimEkrani.verileriYenile();
+            if(cardName.equals("FisAyarlari")) fisAyarlariniYenile(); // Tıklanınca ayarları güncel çek
         });
         return btn;
     }
 
     // ==========================================
-    // YENİ: MASA YÖNETİM SAYFASI
+    // YENİ: FİŞ VE MAĞAZA AYARLARI SAYFASI
     // ==========================================
+    private JPanel fisAyarPaneliOlustur() {
+        JPanel pnlMain = new JPanel(new BorderLayout());
+        pnlMain.setBorder(BorderFactory.createEmptyBorder(30, 30, 30, 30));
+
+        JLabel lblBaslik = new JLabel("🖨️ Adisyon (Termal Fiş) ve Mağaza Ayarları");
+        lblBaslik.setFont(new Font("Arial", Font.BOLD, 24));
+        lblBaslik.setBorder(BorderFactory.createEmptyBorder(0, 0, 20, 0));
+        pnlMain.add(lblBaslik, BorderLayout.NORTH);
+
+        JPanel pnlAyar = new JPanel(new GridLayout(5, 2, 15, 20));
+        
+        txtMagazaAdi = new JTextField(); txtMagazaAdi.setFont(new Font("Arial", Font.PLAIN, 16));
+        txtOnBilgi = new JTextField();   txtOnBilgi.setFont(new Font("Arial", Font.PLAIN, 16));
+        txtAltBilgi = new JTextField();  txtAltBilgi.setFont(new Font("Arial", Font.PLAIN, 16));
+        txtVKN = new JTextField();       txtVKN.setFont(new Font("Arial", Font.PLAIN, 16));
+
+        pnlAyar.add(new JLabel("<html><font size='4'>Mağaza / Restoran Adı <br>(Örn: LEZZET DÜNYASI)</font></html>")); 
+        pnlAyar.add(txtMagazaAdi);
+        
+        pnlAyar.add(new JLabel("<html><font size='4'>Fiş Ön Bilgi (Başlık Altı) <br>(Örn: Bizi tercih ettiğiniz için teşekkürler!)</font></html>")); 
+        pnlAyar.add(txtOnBilgi);
+        
+        pnlAyar.add(new JLabel("<html><font size='4'>Fiş Alt Bilgi (Sipariş Altı) <br>(Örn: Afiyet Olsun! Bizi değerlendirin.)</font></html>")); 
+        pnlAyar.add(txtAltBilgi);
+        
+        pnlAyar.add(new JLabel("<html><font size='4'>Mağaza VKN ve İletişim <br>(Örn: VKN: 123456 | Tel: 0850...)</font></html>")); 
+        pnlAyar.add(txtVKN);
+
+        JButton btnKaydet = new JButton("💾 AYARLARI KAYDET VE SİSTEME UYGULA");
+        btnKaydet.setBackground(new Color(39, 174, 96)); 
+        btnKaydet.setForeground(Color.WHITE);
+        btnKaydet.setFont(new Font("Arial", Font.BOLD, 16));
+        btnKaydet.setFocusPainted(false);
+        
+        btnKaydet.addActionListener(e -> {
+            String komut = "FİS_AYAR_GUNCELLE|" + txtMagazaAdi.getText() + "|" + txtOnBilgi.getText() + "|" + txtAltBilgi.getText() + "|" + txtVKN.getText();
+            String yanit = sunucuyaKomutGonderVeCevapAl(komut);
+            JOptionPane.showMessageDialog(this, yanit, "İşlem Sonucu", JOptionPane.INFORMATION_MESSAGE);
+        });
+        
+        pnlAyar.add(new JLabel()); // Sol tarafı boş bırakmak için
+        pnlAyar.add(btnKaydet);
+
+        pnlMain.add(pnlAyar, BorderLayout.CENTER);
+        
+        // İlk açılışta ayarları yükle
+        fisAyarlariniYenile();
+        
+        return pnlMain;
+    }
+
+    private void fisAyarlariniYenile() {
+        new Thread(() -> {
+            String cvp = sunucuyaKomutGonderVeCevapAl("TUM_AYARLARI_GETIR");
+            if (cvp != null && cvp.startsWith("AYARLAR|")) {
+                SwingUtilities.invokeLater(() -> {
+                    String[] ayarlar = cvp.substring(8).split("\\|\\|\\|");
+                    for (String a : ayarlar) {
+                        if (a.isEmpty()) continue;
+                        String[] kv = a.split("~_~");
+                        if (kv.length == 2) {
+                            if(kv[0].equals("MagazaAdi")) txtMagazaAdi.setText(kv[1]);
+                            if(kv[0].equals("MagazaOnBilgi")) txtOnBilgi.setText(kv[1]);
+                            if(kv[0].equals("MagazaAltBilgi")) txtAltBilgi.setText(kv[1]);
+                            if(kv[0].equals("MagazaVKN")) txtVKN.setText(kv[1]);
+                        }
+                    }
+                });
+            }
+        }).start();
+    }
+    // ==========================================
+
+
     private JPanel masaYonetimSayfasiOlustur() {
         JPanel pnlMain = new JPanel(new BorderLayout(15, 15));
         pnlMain.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
-        // Üst Kısım: Ekleme/Silme Formu
         JPanel pnlUst = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 10));
         pnlUst.setBorder(BorderFactory.createTitledBorder("Yeni Masa Ekle / Sil"));
 
@@ -168,7 +250,6 @@ public class AdminPaneli extends JFrame {
         pnlUst.add(btnEkle);
         pnlUst.add(btnSil);
 
-        // Orta Kısım: Masa Tablosu
         masaTableModel = new DefaultTableModel(new String[]{"Masa Adı", "Anlık Durumu"}, 0) {
             @Override public boolean isCellEditable(int row, int column) { return false; }
         };
@@ -176,14 +257,12 @@ public class AdminPaneli extends JFrame {
         masaTablo.setRowHeight(35);
         masaTablo.setFont(new Font("Arial", Font.PLAIN, 15));
         
-        // Tablo Sütun Boyut Ayarları
         masaTablo.getColumnModel().getColumn(0).setPreferredWidth(300);
         masaTablo.getColumnModel().getColumn(1).setPreferredWidth(150);
 
         pnlMain.add(pnlUst, BorderLayout.NORTH);
         pnlMain.add(new JScrollPane(masaTablo), BorderLayout.CENTER);
 
-        // Aksiyonlar
         btnEkle.addActionListener(e -> {
             String mAdi = txtMasaAdi.getText().trim();
             if (mAdi.isEmpty()) {
@@ -193,7 +272,7 @@ public class AdminPaneli extends JFrame {
             String cvp = sunucuyaKomutGonderVeCevapAl("MASA_EKLE|" + mAdi);
             JOptionPane.showMessageDialog(this, cvp);
             txtMasaAdi.setText("");
-            masalariYenile(); // Tabloyu anında güncelle
+            masalariYenile(); 
         });
 
         btnSil.addActionListener(e -> {
@@ -214,7 +293,7 @@ public class AdminPaneli extends JFrame {
             if (onay == JOptionPane.YES_OPTION) {
                 String cvp = sunucuyaKomutGonderVeCevapAl("MASA_SIL|" + mAdi);
                 JOptionPane.showMessageDialog(this, cvp);
-                masalariYenile(); // Tabloyu anında güncelle
+                masalariYenile(); 
             }
         });
 
@@ -239,7 +318,6 @@ public class AdminPaneli extends JFrame {
             });
         }).start();
     }
-    // ==========================================
 
     private JPanel dashboardSayfasiOlustur() {
         JPanel pnlMain = new JPanel(new BorderLayout(20, 20));

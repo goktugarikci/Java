@@ -665,32 +665,70 @@ public class DatabaseManager {
         } catch (Exception e) { return "HATA|Aktif masalar çekilemedi: " + e.getMessage(); }
     }
 
-    // ==========================================
-    // 6. SİPARİŞ VE KASA (YENİ ALTYAPI)
+// ==========================================
+    // SİPARİŞ OLUŞTURMA: PAKET AYRIMI VE MUTFAK ONAY KONTROLÜ
     // ==========================================
     public static String siparisOlustur(String masa, String musteri, String html, String urunlerData) {
-        String sql = "INSERT INTO Siparisler_Mutfak (MasaIsmi, MusteriIsmi, FisHTML, SiparisZamani, Durum) VALUES (?, ?, ?, datetime('now','localtime'), 'BEKLEMEDE')";
-        try (Connection conn = DriverManager.getConnection(URL); PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, masa); pstmt.setString(2, musteri); pstmt.setString(3, html);
-            pstmt.executeUpdate();
+        try (Connection conn = DriverManager.getConnection(URL)) {
             
-            // Stok Düşme
+            int existingOrderId = -1;
+            String oldHtml = "";
+            
+            // SADECE MASA SİPARİŞLERİ İÇİN BİRLEŞTİRME KONTROLÜ
+            // Paket ve Eve Servis her zaman yeni sipariştir.
+            if (!masa.equals("PAKET") && !masa.contains("EVE_SERVIS") && !masa.contains("Telefon")) {
+                // Sadece 'BEKLEMEDE' veya 'YENI' olan (mutfak onaylamadığı) siparişlere ekleme yapılabilir
+                String checkSql = "SELECT OrderID, FisHTML FROM Siparisler_Mutfak " +
+                                 "WHERE MasaIsmi = ? AND Durum IN ('BEKLEMEDE', 'YENI')";
+                try (PreparedStatement pstmt = conn.prepareStatement(checkSql)) {
+                    pstmt.setString(1, masa);
+                    ResultSet rs = pstmt.executeQuery();
+                    if (rs.next()) {
+                        existingOrderId = rs.getInt("OrderID");
+                        oldHtml = rs.getString("FisHTML");
+                    }
+                }
+            }
+
+            if (existingOrderId != -1) {
+                // --- MASA İÇİN EK SİPARİŞ BİRLEŞTİRME ---
+                String temizEski = oldHtml.replaceAll("(?i)</html>", "");
+                int hrIndex = temizEski.lastIndexOf("<hr><div style='text-align: right; font-size: 15px;'><b>Genel Toplam:");
+                if (hrIndex != -1) temizEski = temizEski.substring(0, hrIndex);
+                
+                String temizYeni = html.replaceAll("(?i)<html>", "");
+                String birlesikHtml = temizEski + "<br><b style='color:blue;'>[EKLEME]</b> " + temizYeni;
+
+                String sqlUpdate = "UPDATE Siparisler_Mutfak SET FisHTML = ?, Durum = 'BEKLEMEDE' WHERE OrderID = ?";
+                try (PreparedStatement pstmt = conn.prepareStatement(sqlUpdate)) {
+                    pstmt.setString(1, birlesikHtml);
+                    pstmt.setInt(2, existingOrderId);
+                    pstmt.executeUpdate();
+                }
+            } else {
+                // --- YENİ SİPARİŞ (PAKETLER VE ONAYLANMIŞ MASALAR BURAYA DÜŞER) ---
+                String sql = "INSERT INTO Siparisler_Mutfak (MasaIsmi, MusteriIsmi, FisHTML, SiparisZamani, Durum) VALUES (?, ?, ?, datetime('now','localtime'), 'BEKLEMEDE')";
+                try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                    pstmt.setString(1, masa); 
+                    pstmt.setString(2, musteri); 
+                    pstmt.setString(3, html);
+                    pstmt.executeUpdate();
+                }
+            }
+
+            // Stok Düşme İşlemi
             if (urunlerData != null && !urunlerData.isEmpty() && !urunlerData.equals("null")) {
                 String[] urunler = urunlerData.split(",");
                 for (String u : urunler) {
                     String[] detay = u.split(":");
                     if (detay.length == 2) {
-                        String ad = detay[0]; int adet = Integer.parseInt(detay[1]);
                         try(PreparedStatement p1 = conn.prepareStatement("UPDATE Urunler SET Stock = Stock - ? WHERE ProductName = ?")) {
-                            p1.setInt(1, adet); p1.setString(2, ad); p1.executeUpdate();
-                        }
-                        try(PreparedStatement p2 = conn.prepareStatement("INSERT INTO GunlukSatislar (UrunAdi, Adet) VALUES (?, ?)")) {
-                            p2.setString(1, ad); p2.setInt(2, adet); p2.executeUpdate();
+                            p1.setInt(1, Integer.parseInt(detay[1])); p1.setString(2, detay[0]); p1.executeUpdate();
                         }
                     }
                 }
             }
-            return "BAŞARILI|Sipariş oluşturuldu.";
+            return "BAŞARILI|Sipariş işlendi.";
         } catch (Exception e) { return "HATA|" + e.getMessage(); }
     }
 
@@ -717,37 +755,7 @@ public class DatabaseManager {
     }
 
 
-// ==========================================
-    // KASADAN ÖDEME ALINDIĞINDA KURYE VE ÖDEME TÜRÜNÜ GEÇMİŞE YAZAR
-    // ==========================================
-    public static String siparisOdemeAl(int orderId, String odemeTuru, String tutar) {
-        String sqlUpdate = "UPDATE Siparisler_Mutfak SET Durum = 'ODENDI' WHERE OrderID = ?";
-        
-        // Z Raporu ve Kurye hesapları için Kurye ve OdemeTuru bilgilerini de Ciro Arşivine yolluyoruz
-        String sqlInsertGecmis = "INSERT INTO SiparisGecmisi (OrderID, MasaAdi, FisHTML, ToplamTutar, Tarih, Kurye, OdemeTuru) " +
-                                 "SELECT OrderID, MasaIsmi, FisHTML, ?, datetime('now', 'localtime'), Kurye, ? " +
-                                 "FROM Siparisler_Mutfak WHERE OrderID = ?";
 
-        try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL)) {
-            try (java.sql.PreparedStatement pstmt = conn.prepareStatement(sqlUpdate)) {
-                pstmt.setInt(1, orderId);
-                pstmt.executeUpdate();
-            }
-            try (java.sql.PreparedStatement pstmt2 = conn.prepareStatement(sqlInsertGecmis)) {
-                double miktar = 0.0;
-                try { miktar = Double.parseDouble(tutar.replace(",", ".")); } catch (Exception ignored) {}
-                
-                pstmt2.setDouble(1, miktar);
-                pstmt2.setString(2, odemeTuru); // Nakit veya Kart
-                pstmt2.setInt(3, orderId);
-                pstmt2.executeUpdate();
-            }
-            return "BAŞARILI|Sipariş kapatıldı ve " + tutar + " TL tutarındaki ödeme (" + odemeTuru + ") Z Raporu cirosuna eklendi!";
-            
-        } catch (Exception e) { 
-            return "HATA|Ödeme alınamadı: " + e.getMessage(); 
-        }
-    }
     // ==========================================
     // YENİ: KURYE GÜN SONU / VARDİYA HESABI ALMA
     // ==========================================
@@ -948,7 +956,7 @@ public class DatabaseManager {
     public static String mutfakSiparisleriGetirFull() {
         StringBuilder sb = new StringBuilder("MUTFAK_FULL_VERI|");
         // DİKKAT: Artık sadece YENİ veya HAZIR olanları değil, Arşivlenmemiş (Gün Sonu Alınmamış) TÜM siparişleri mutfağa yollar
-        String sql = "SELECT * FROM Siparisler_Mutfak WHERE Durum NOT LIKE '%_ARSIV' ORDER BY OrderID DESC LIMIT 100";
+        String sql = "SELECT * FROM Siparisler_Mutfak WHERE Durum NOT LIKE '%_ARSIV' ORDER BY OrderID ASC LIMIT 100";
         
         try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL);
              java.sql.Statement stmt = conn.createStatement(); 
@@ -1014,24 +1022,164 @@ public class DatabaseManager {
             return "HATA|Mutfak özet verileri çekilemedi: " + e.getMessage(); 
         }
     }
+    // ==========================================
+    // AYARLAR TABLOSU VE FİŞ BİLGİLERİ YÖNETİMİ
+    // ==========================================
+    public static void ayarlarTablosunuKur() {
+        String sql = "CREATE TABLE IF NOT EXISTS Ayarlar (Anahtar TEXT PRIMARY KEY, Deger TEXT)";
+        try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL); 
+             java.sql.Statement stmt = conn.createStatement()) {
+            stmt.execute(sql);
+            
+            // Eğer tablo boşsa varsayılan fiş bilgilerini otomatik ekler
+            String[] anahtarlar = {"MagazaAdi", "MagazaOnBilgi", "MagazaAltBilgi", "MagazaVKN"};
+            String[] degerler = {
+                "LEZZET DÜNYASI", 
+                "Bizi tercih ettiğiniz için teşekkür ederiz!", 
+                "Afiyet Olsun! Bizi değerlendirmeyi unutmayın.", 
+                "VKN: 1234567890 | Tel: 0850 555 55 55"
+            };
+            
+            String insertSql = "INSERT OR IGNORE INTO Ayarlar (Anahtar, Deger) VALUES (?, ?)";
+            try (java.sql.PreparedStatement pstmt = conn.prepareStatement(insertSql)) {
+                for (int i = 0; i < anahtarlar.length; i++) {
+                    pstmt.setString(1, anahtarlar[i]);
+                    pstmt.setString(2, degerler[i]);
+                    pstmt.executeUpdate();
+                }
+            }
+        } catch (Exception e) {}
+    }
 
+    public static String tumAyarlariGetir() {
+        ayarlarTablosunuKur();
+        StringBuilder sb = new StringBuilder("AYARLAR|");
+        String sql = "SELECT Anahtar, Deger FROM Ayarlar";
+        try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL); 
+             java.sql.Statement stmt = conn.createStatement(); 
+             java.sql.ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                sb.append(rs.getString("Anahtar")).append("~_~").append(rs.getString("Deger")).append("|||");
+            }
+            return sb.toString();
+        } catch (Exception e) { return "HATA|Ayarlar çekilemedi."; }
+    }
+
+    public static String ayarGuncelle(String magazaAdi, String onBilgi, String altBilgi, String vkn) {
+        String sql = "UPDATE Ayarlar SET Deger = ? WHERE Anahtar = ?";
+        try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL); 
+             java.sql.PreparedStatement pstmt = conn.prepareStatement(sql)) {
+             
+            pstmt.setString(1, magazaAdi); pstmt.setString(2, "MagazaAdi"); pstmt.executeUpdate();
+            pstmt.setString(1, onBilgi); pstmt.setString(2, "MagazaOnBilgi"); pstmt.executeUpdate();
+            pstmt.setString(1, altBilgi); pstmt.setString(2, "MagazaAltBilgi"); pstmt.executeUpdate();
+            pstmt.setString(1, vkn); pstmt.setString(2, "MagazaVKN"); pstmt.executeUpdate();
+            
+            return "BAŞARILI|Fiş ve mağaza ayarları başarıyla güncellendi.";
+        } catch (Exception e) { return "HATA|Ayarlar güncellenemedi."; }
+    }
+    // ==========================================
+    // KASADAKİ AKTİF SİPARİŞLERİ GETİRİR (ZAMAN SAYACI İÇİN GÜNCELLENDİ)
+    // ==========================================
     public static String kasaSiparisleriGetir() {
         StringBuilder sb = new StringBuilder("KASA_VERI|");
-        String sql = "SELECT OrderID, MasaIsmi, MusteriIsmi, Durum, FisHTML FROM Siparisler_Mutfak WHERE Durum NOT IN ('ODENDI', 'IPTAL') ORDER BY OrderID DESC";
-        try (Connection conn = DriverManager.getConnection(URL); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
+        String sql = "SELECT OrderID, MasaIsmi, MusteriIsmi, Durum, FisHTML, Kurye, SiparisZamani, YolaCikisZamani FROM Siparisler_Mutfak WHERE Durum NOT IN ('ODENDI', 'IPTAL') ORDER BY OrderID DESC";
+        
+        try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL); 
+             java.sql.Statement stmt = conn.createStatement(); 
+             java.sql.ResultSet rs = stmt.executeQuery(sql)) {
+            
             while (rs.next()) {
-                sb.append(rs.getInt("OrderID")).append("~_~").append(rs.getString("MasaIsmi")).append("~_~").append(rs.getString("MusteriIsmi")).append("~_~").append(rs.getString("Durum")).append("~_~").append(rs.getString("FisHTML")).append("|||");
+                String durum = rs.getString("Durum");
+                String kurye = rs.getString("Kurye");
+                
+                String rawSipZaman = rs.getString("SiparisZamani"); // Kronometre için ham veri
+                String sipZaman = kisaZamanFormatla(rawSipZaman);
+                String yolaZaman = rs.getString("YolaCikisZamani");
+                
+                if (durum.equals("YOLA_CIKTI") && kurye != null && !kurye.equals("Atanmadi")) {
+                    durum = "YOLA_CIKTI (" + kurye + ")";
+                }
+
+                String zamanKutusuHtml = "<div style='background:#e8f8f5; border:1px solid #1abc9c; padding:10px; margin-bottom:15px; font-size:14px; color:#2c3e50;'>" +
+                                         "<b>📝 Alınma Saati:</b> " + sipZaman;
+                
+                if (yolaZaman != null && !yolaZaman.trim().isEmpty()) {
+                    zamanKutusuHtml += " &nbsp;&nbsp;|&nbsp;&nbsp; <b>🛵 Yola Çıkma:</b> " + kisaZamanFormatla(yolaZaman);
+                }
+                zamanKutusuHtml += "</div>";
+                
+                String finalHtml = zamanKutusuHtml + rs.getString("FisHTML");
+                finalHtml = finalHtml.replace("\n", " ").replace("\r", " ");
+                
+                sb.append(rs.getInt("OrderID")).append("~_~")
+                  .append(rs.getString("MasaIsmi")).append("~_~")
+                  .append(rs.getString("MusteriIsmi")).append("~_~")
+                  .append(durum).append("~_~")
+                  .append(finalHtml).append("~_~")
+                  .append(rawSipZaman != null ? rawSipZaman : "Bilinmiyor").append("|||");
             }
             return sb.toString();
         } catch (Exception e) { return "HATA|Kasa verisi çekilemedi: " + e.getMessage(); }
     }
 
+    // ==========================================
+    // KISA ZAMAN FORMATLAYICI (YARDIMCI METOT)
+    // ==========================================
+    private static String kisaZamanFormatla(String dt) {
+        if (dt == null || dt.trim().isEmpty() || dt.contains("Bilinmiyor")) return "Bilinmiyor";
+        try {
+            // "2026-04-12 14:35:01" formatını "14:35" olarak kırpar
+            if (dt.length() >= 16) return dt.substring(11, 16); 
+        } catch (Exception e) {}
+        return dt;
+    }
+
+    // ==========================================
+    // KASADAKİ GEÇMİŞ SİPARİŞLERİ GETİRİR (TAMAMLANMA SAATİ EKLENTİLİ)
+    // ==========================================
     public static String kasaGecmisSiparisleriGetir() {
         StringBuilder sb = new StringBuilder("KASA_GECMIS_VERI|");
-        String sql = "SELECT OrderID, MasaIsmi, MusteriIsmi, Durum, FisHTML FROM Siparisler_Mutfak WHERE Durum IN ('ODENDI', 'IPTAL') ORDER BY OrderID DESC LIMIT 50";
-        try (Connection conn = DriverManager.getConnection(URL); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
+        String sql = "SELECT OrderID, MasaIsmi, MusteriIsmi, Durum, FisHTML, Kurye, SiparisZamani, YolaCikisZamani, TeslimZamani FROM Siparisler_Mutfak WHERE Durum IN ('ODENDI', 'IPTAL') ORDER BY OrderID DESC LIMIT 50";
+        
+        try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL); 
+             java.sql.Statement stmt = conn.createStatement(); 
+             java.sql.ResultSet rs = stmt.executeQuery(sql)) {
+            
             while (rs.next()) {
-                sb.append(rs.getInt("OrderID")).append("~_~").append(rs.getString("MasaIsmi")).append("~_~").append(rs.getString("MusteriIsmi")).append("~_~").append(rs.getString("Durum")).append("~_~").append(rs.getString("FisHTML")).append("|||");
+                String durum = rs.getString("Durum");
+                String kurye = rs.getString("Kurye");
+                
+                String sipZaman = kisaZamanFormatla(rs.getString("SiparisZamani"));
+                String yolaZaman = rs.getString("YolaCikisZamani");
+                String tamamZaman = rs.getString("TeslimZamani"); // Tamamlanma saati
+                
+                if (durum.equals("ODENDI") && kurye != null && !kurye.equals("Atanmadi") && !kurye.trim().isEmpty()) {
+                    durum = "ÖDENDİ (" + kurye + " Teslim Etti)";
+                }
+
+                // Geçmiş Siparişler için Şık Kutu
+                String zamanKutusuHtml = "<div style='background:#f2f3f4; border:1px solid #bdc3c7; padding:10px; margin-bottom:15px; font-size:14px; color:#2c3e50;'>" +
+                                         "<b>📝 Alınma Saati:</b> " + sipZaman;
+                
+                if (yolaZaman != null && !yolaZaman.trim().isEmpty()) {
+                    zamanKutusuHtml += " &nbsp;&nbsp;|&nbsp;&nbsp; <b>🛵 Çıkış:</b> " + kisaZamanFormatla(yolaZaman);
+                }
+                
+                // Siparişin Kapatıldığı / Ödendiği An
+                if (tamamZaman != null && !tamamZaman.trim().isEmpty()) {
+                    zamanKutusuHtml += " &nbsp;&nbsp;|&nbsp;&nbsp; <b>✅ Tamamlanma:</b> <font color='green'>" + kisaZamanFormatla(tamamZaman) + "</font>";
+                }
+                zamanKutusuHtml += "</div>";
+                
+                String finalHtml = zamanKutusuHtml + rs.getString("FisHTML");
+                finalHtml = finalHtml.replace("\n", " ").replace("\r", " ");
+                
+                sb.append(rs.getInt("OrderID")).append("~_~")
+                  .append(rs.getString("MasaIsmi")).append("~_~")
+                  .append(rs.getString("MusteriIsmi")).append("~_~")
+                  .append(durum).append("~_~")
+                  .append(finalHtml).append("|||");
             }
             return sb.toString();
         } catch (Exception e) { return "HATA|Geçmiş veriler çekilemedi: " + e.getMessage(); }
@@ -1153,69 +1301,157 @@ public class DatabaseManager {
         } catch (Exception e) { return "HATA|Kuryeler çekilemedi: " + e.getMessage(); }
     }
 
+
     // ==========================================
-    // SADELEŞTİRİLMİŞ KURYE ATAMA MOTORU (FİŞE YAZMA İPTAL EDİLDİ)
+    // 1. GÜVENLİ ZAMAN SÜTUNLARI OLUŞTURUCU (YENİ)
+    // ==========================================
+    private static void kuryeZamanSutunlariniEkle() {
+        try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL);
+             java.sql.Statement st = conn.createStatement()) {
+            try { st.execute("ALTER TABLE Siparisler_Mutfak ADD COLUMN YolaCikisZamani DATETIME"); } catch (Exception ignored) {}
+            try { st.execute("ALTER TABLE Siparisler_Mutfak ADD COLUMN TeslimZamani DATETIME"); } catch (Exception ignored) {}
+            try { st.execute("ALTER TABLE SiparisGecmisi ADD COLUMN SiparisZamani DATETIME"); } catch (Exception ignored) {}
+            try { st.execute("ALTER TABLE SiparisGecmisi ADD COLUMN YolaCikisZamani DATETIME"); } catch (Exception ignored) {}
+            try { st.execute("ALTER TABLE SiparisGecmisi ADD COLUMN TeslimZamani DATETIME"); } catch (Exception ignored) {}
+        } catch (Exception ignored) {}
+    }
+
+    // ==========================================
+    // 2. KURYE ATAMA (GÜNCELLENDİ)
     // ==========================================
     public static String kuryeAta(int orderId, String kuryeAdi) {
-        // Sadece veritabanındaki Kurye ve Durum sütunlarını güncelliyoruz.
-        String sqlUpdate = "UPDATE Siparisler_Mutfak SET Kurye = ?, Durum = 'YOLA_CIKTI' WHERE OrderID = ?";
-
-        try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL)) {
-            
-            try (java.sql.PreparedStatement pstmt = conn.prepareStatement(sqlUpdate)) {
-                pstmt.setString(1, kuryeAdi);
-                pstmt.setInt(2, orderId);
-                pstmt.executeUpdate();
-            } catch (java.sql.SQLException ex) {
-                // Eğer Kurye sütunu eski veritabanında henüz yoksa, anında oluşturup tekrar deneriz.
-                try (java.sql.Statement st = conn.createStatement()) {
-                    st.execute("ALTER TABLE Siparisler_Mutfak ADD COLUMN Kurye TEXT DEFAULT 'Atanmadi';");
-                } catch (Exception ignored) {}
-
-                try (java.sql.PreparedStatement pstmt2 = conn.prepareStatement(sqlUpdate)) {
-                    pstmt2.setString(1, kuryeAdi);
-                    pstmt2.setInt(2, orderId);
-                    pstmt2.executeUpdate();
-                }
-            }
-            return "BAŞARILI|Kurye (" + kuryeAdi + ") atandı ve sipariş yola çıktı.";
-            
-        } catch (Exception e) {
-            return "HATA|Kurye atama işlemi başarısız: " + e.getMessage();
-        }
+        kuryeZamanSutunlariniEkle();
+        String sqlUpdate = "UPDATE Siparisler_Mutfak SET Kurye = ?, Durum = 'YOLA_CIKTI', YolaCikisZamani = datetime('now', 'localtime') WHERE OrderID = ?";
+        try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL);
+             java.sql.PreparedStatement pstmt = conn.prepareStatement(sqlUpdate)) {
+            pstmt.setString(1, kuryeAdi); pstmt.setInt(2, orderId); pstmt.executeUpdate();
+            return "BAŞARILI|Kurye atandı ve yola çıktı.";
+        } catch (Exception e) { return "HATA|Atama işlemi başarısız: " + e.getMessage(); }
     }
+
     // ==========================================
-    // YÖNETİCİ İÇİN KURYE TAKİP VERİLERİNİ GETİRİR
+    // 3. TOPLU YOLA ÇIKIŞ (GÜNCELLENDİ)
     // ==========================================
-    public static String kuryeTakipSiparisleriGetir(String kuryeAdi) {
-        StringBuilder sb = new StringBuilder("KURYE_TAKIP_VERI|");
-        String sql = "SELECT OrderID, Musteri, Durum, FisHTML FROM Siparisler_Mutfak WHERE Kurye = ? ORDER BY OrderID DESC";
-        
+    public static String kuryeTopluYolaCikar(String kuryeAdi) {
+        kuryeZamanSutunlariniEkle();
+        String sql = "UPDATE Siparisler_Mutfak SET Durum = 'YOLA_CIKTI', YolaCikisZamani = datetime('now', 'localtime') WHERE Kurye = ? AND Durum IN ('BEKLEMEDE', 'HAZIR', 'HAZIRLANIYOR')";
         try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL); 
              java.sql.PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            
-            // İsimdeki olası boşlukları temizleyerek arıyoruz
             pstmt.setString(1, kuryeAdi.trim());
-            try (java.sql.ResultSet rs = pstmt.executeQuery()) {
-                boolean veriVar = false;
-                while (rs.next()) {
-                    veriVar = true;
-                    String html = rs.getString("FisHTML");
-                    if (html == null) html = "";
-                    
-                    // KRİTİK NOKTA: HTML içindeki enter/satır atlamalarını siliyoruz ki Soket bağlantısı kopmasın!
-                    html = html.replace("\n", " ").replace("\r", " ");
-                    
-                    sb.append(rs.getInt("OrderID")).append("~_~")
-                      .append(rs.getString("Musteri")).append("~_~")
-                      .append(rs.getString("Durum")).append("~_~")
-                      .append(html).append("|||");
+            int etkilenen = pstmt.executeUpdate();
+            return "BAŞARILI|Kurye " + etkilenen + " adet siparişle yola çıktı!";
+        } catch (Exception e) { return "HATA|İşlem başarısız: " + e.getMessage(); }
+    }
+
+    // ==========================================
+    // 4. MERKEZE DÖNÜŞ VE TESLİM (GÜNCELLENDİ)
+    // ==========================================
+    public static String kuryeMerkezeDondu(String kuryeAdi) {
+        kuryeZamanSutunlariniEkle();
+        String sql = "UPDATE Siparisler_Mutfak SET Durum = 'TESLIM_EDILDI', TeslimZamani = datetime('now', 'localtime') WHERE Kurye = ? AND Durum = 'YOLA_CIKTI'";
+        try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL); 
+             java.sql.PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, kuryeAdi.trim());
+            int etkilenen = pstmt.executeUpdate();
+            return "BAŞARILI|Kurye merkeze döndü. " + etkilenen + " paket teslim edildi.";
+        } catch (Exception e) { return "HATA|İşlem başarısız: " + e.getMessage(); }
+    }
+
+    // ==========================================
+    // KASADAN ÖDEME ALMA VE ARŞİVLEME
+    // ==========================================
+    public static String siparisOdemeAl(int orderId, String odemeTuru, String tutar) {
+        kuryeZamanSutunlariniEkle();
+        
+        // DÜZELTME: Sadece ODENDI yapmakla kalmıyor, normal masa ise o anki saati "Tamamlanma Saati" olarak veritabanına işliyor
+        String sqlUpdate = "UPDATE Siparisler_Mutfak SET Durum = 'ODENDI', TeslimZamani = COALESCE(TeslimZamani, datetime('now', 'localtime')) WHERE OrderID = ?";
+        
+        String sqlInsertGecmis = "INSERT INTO SiparisGecmisi (OrderID, MasaAdi, FisHTML, ToplamTutar, Tarih, Kurye, OdemeTuru, SiparisZamani, YolaCikisZamani, TeslimZamani) " +
+                                 "SELECT OrderID, MasaIsmi, FisHTML, ?, datetime('now', 'localtime'), Kurye, ?, SiparisZamani, YolaCikisZamani, TeslimZamani " +
+                                 "FROM Siparisler_Mutfak WHERE OrderID = ?";
+        try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL)) {
+            try (java.sql.PreparedStatement pstmt = conn.prepareStatement(sqlUpdate)) { 
+                pstmt.setInt(1, orderId); 
+                pstmt.executeUpdate(); 
+            }
+            try (java.sql.PreparedStatement pstmt2 = conn.prepareStatement(sqlInsertGecmis)) {
+                double miktar = 0.0;
+                try { miktar = Double.parseDouble(tutar.replace(",", ".")); } catch (Exception ignored) {}
+                pstmt2.setDouble(1, miktar); 
+                pstmt2.setString(2, odemeTuru); 
+                pstmt2.setInt(3, orderId); 
+                pstmt2.executeUpdate();
+            }
+            return "BAŞARILI|Sipariş kapatıldı ve " + tutar + " TL Z Raporu cirosuna eklendi!";
+        } catch (Exception e) { return "HATA|Ödeme alınamadı: " + e.getMessage(); }
+    }
+
+    // ==========================================
+    // 6. KURYE TAKİP VERİLERİNİ GETİRİR (GÜNCELLENDİ)
+    // ==========================================
+    public static String kuryeTakipSiparisleriGetir(String kuryeAdi) {
+        kuryeZamanSutunlariniEkle();
+        StringBuilder sb = new StringBuilder("KURYE_TAKIP_VERI|");
+        try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL)) {
+            // 1. AKTİF SİPARİŞLER 
+            String sqlAktif = "SELECT OrderID, MusteriIsmi, Durum, FisHTML, SiparisZamani, YolaCikisZamani, TeslimZamani FROM Siparisler_Mutfak WHERE Kurye = ? AND Durum NOT IN ('ODENDI', 'IPTAL') ORDER BY OrderID DESC";
+            try (java.sql.PreparedStatement pstmt = conn.prepareStatement(sqlAktif)) {
+                pstmt.setString(1, kuryeAdi.trim());
+                try (java.sql.ResultSet rs = pstmt.executeQuery()) {
+                    while (rs.next()) {
+                        String html = rs.getString("FisHTML");
+                        if (html == null) html = "";
+                        html = html.replace("\n", " ").replace("\r", " ");
+                        
+                        String sipZaman = rs.getString("SiparisZamani");
+                        String yolaZaman = rs.getString("YolaCikisZamani");
+                        String tesZaman = rs.getString("TeslimZamani");
+
+                        sb.append(rs.getInt("OrderID")).append("~_~")
+                          .append(rs.getString("MusteriIsmi")).append("~_~")
+                          .append(rs.getString("Durum")).append("~_~")
+                          .append(html).append("~_~")
+                          .append(sipZaman != null ? sipZaman : "Bilinmiyor").append("~_~")
+                          .append(yolaZaman != null ? yolaZaman : "Henüz Çıkmadı").append("~_~")
+                          .append(tesZaman != null ? tesZaman : "Henüz Teslim Edilmedi").append("|||");
+                    }
                 }
-                if (!veriVar) return "KURYE_TAKIP_VERI|BOS"; // Eğer sipariş yoksa boş döner
+            }
+
+            sb.append("===GECMIS===");
+
+            // 2. GEÇMİŞ SİPARİŞLER 
+            String sqlGecmis = "SELECT OrderID, FisHTML, Tarih, SiparisZamani, YolaCikisZamani, TeslimZamani FROM SiparisGecmisi WHERE Kurye = ? AND date(Tarih) = date('now', 'localtime') ORDER BY ID DESC";
+            try (java.sql.PreparedStatement pstmt = conn.prepareStatement(sqlGecmis)) {
+                pstmt.setString(1, kuryeAdi.trim());
+                try (java.sql.ResultSet rs = pstmt.executeQuery()) {
+                    while (rs.next()) {
+                        String html = rs.getString("FisHTML");
+                        if (html == null) html = "";
+                        html = html.replace("\n", " ").replace("\r", " ");
+                        
+                        String sipZaman = rs.getString("SiparisZamani");
+                        String yolaZaman = rs.getString("YolaCikisZamani");
+                        String tesZaman = rs.getString("TeslimZamani");
+                        if (tesZaman == null) tesZaman = rs.getString("Tarih");
+
+                        String musteri = "Bilinmiyor";
+                        java.util.regex.Matcher m = java.util.regex.Pattern.compile("Müşteri:\\s*<b>([^<]+)</b>").matcher(html);
+                        if(m.find()) musteri = m.group(1);
+
+                        sb.append(rs.getInt("OrderID")).append("~_~")
+                          .append(musteri).append("~_~")
+                          .append("TESLIM_EDILDI").append("~_~")
+                          .append(html).append("~_~")
+                          .append(sipZaman != null ? sipZaman : "Bilinmiyor").append("~_~")
+                          .append(yolaZaman != null ? yolaZaman : "Bilinmiyor").append("~_~")
+                          .append(tesZaman != null ? tesZaman : "Bilinmiyor").append("|||");
+                    }
+                }
             }
             return sb.toString();
-        } catch (Exception e) { 
-            return "HATA|Kurye siparişleri çekilemedi: " + e.getMessage(); 
+        } catch (Exception e) {
+            return "HATA|Kurye siparişleri çekilemedi: " + e.getMessage();
         }
     }
 
