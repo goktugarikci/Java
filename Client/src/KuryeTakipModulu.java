@@ -1,6 +1,8 @@
 import javax.swing.*;
 import java.awt.*;
 import java.awt.print.PrinterException;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class KuryeTakipModulu extends JPanel {
     private PersonelPaneli anaPanel;
@@ -20,6 +22,7 @@ public class KuryeTakipModulu extends JPanel {
     public KuryeTakipModulu(PersonelPaneli anaPanel) {
         this.anaPanel = anaPanel;
         setLayout(new BorderLayout(10, 10));
+        setBackground(new Color(236, 240, 241));
         setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
 
         ayarlariYukle();
@@ -27,7 +30,7 @@ public class KuryeTakipModulu extends JPanel {
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
         splitPane.setDividerLocation(320);
 
-        // --- SOL PANEL (Aktif Kuryeler) ---
+        // --- SOL PANEL: KURYE LİSTESİ ---
         JPanel pnlSol = new JPanel(new BorderLayout(5, 5));
         pnlSol.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(new Color(41, 128, 185), 2), "Aktif Kuryeler", 0, 0, new Font("Arial", Font.BOLD, 14)));
 
@@ -42,12 +45,12 @@ public class KuryeTakipModulu extends JPanel {
 
         JButton btnYenile = new JButton("🔄 Listeyi Yenile");
         btnYenile.setFont(new Font("Arial", Font.BOLD, 14));
-        btnYenile.addActionListener(e -> kuryeleriGetir());
+        btnYenile.addActionListener(e -> verileriYenile());
         pnlSol.add(btnYenile, BorderLayout.SOUTH);
 
         splitPane.setLeftComponent(pnlSol);
 
-        // --- SAĞ PANEL (Kurye Üzerindeki Siparişler) ---
+        // --- SAĞ PANEL: SİPARİŞ DETAYLARI ---
         JPanel pnlSagAna = new JPanel(new BorderLayout(5, 5));
         pnlSiparisler = new JPanel();
         pnlSiparisler.setLayout(new BoxLayout(pnlSiparisler, BoxLayout.Y_AXIS));
@@ -64,7 +67,7 @@ public class KuryeTakipModulu extends JPanel {
         pnlSagAna.add(scrollSiparisler, BorderLayout.CENTER);
 
         JPanel pnlAltKontrol = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        btnKuryeAksiyon = new JButton("İşlem Seçin");
+        btnKuryeAksiyon = new JButton("İşlem Bekleniyor");
         btnKuryeAksiyon.setFont(new Font("Arial", Font.BOLD, 16));
         btnKuryeAksiyon.setPreferredSize(new Dimension(300, 50));
         btnKuryeAksiyon.setEnabled(false);
@@ -77,35 +80,17 @@ public class KuryeTakipModulu extends JPanel {
         splitPane.setRightComponent(pnlSagAna);
         add(splitPane, BorderLayout.CENTER);
 
-        // KURYE SEÇİMİ (KESİN TEMİZLEME MANTIĞI)
+        // KURYE SEÇİMİ VE İSİM TEMİZLEME
         kuryeListesi.addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting() && kuryeListesi.getSelectedValue() != null) {
                 String hamMetin = kuryeListesi.getSelectedValue();
-                // Emojileri ve parantezli durum yazılarını temizler, sadece kurye adını bırakır
+                // Regex: Sadece kurye ismini al, emojileri ve (Müsait) gibi ekleri temizle
                 seciliGercekKuryeAdi = hamMetin.replaceAll("[🛵🟢🔴]", "").split("\\(")[0].trim();
                 siparisleriGetir(seciliGercekKuryeAdi);
             }
         });
 
         kuryeleriGetir();
-    }
-
-    private void ayarlariYukle() {
-        new Thread(() -> {
-            String cvpAyar = anaPanel.sunucuyaKomutGonderVeCevapAl("TUM_AYARLARI_GETIR");
-            if (cvpAyar != null && cvpAyar.startsWith("AYARLAR|")) {
-                String[] ayarlar = cvpAyar.substring(8).split("\\|\\|\\|");
-                for (String a : ayarlar) {
-                    String[] kv = a.split("~_~");
-                    if (kv.length == 2) {
-                        if(kv[0].equals("MagazaAdi")) ayarMagazaAdi = kv[1];
-                        if(kv[0].equals("MagazaOnBilgi")) ayarOnBilgi = kv[1];
-                        if(kv[0].equals("MagazaAltBilgi")) ayarAltBilgi = kv[1];
-                        if(kv[0].equals("MagazaVKN")) ayarVKN = kv[1];
-                    }
-                }
-            }
-        }).start();
     }
 
     public void kuryeleriGetir() {
@@ -118,6 +103,7 @@ public class KuryeTakipModulu extends JPanel {
                     for (int i = 1; i < parcalar.length; i++) {
                         String kAdi = parcalar[i].trim();
                         if (!kAdi.isEmpty()) {
+                            // Kuryenin meşguliyet durumunu belirle
                             String durumCvp = anaPanel.sunucuyaKomutGonderVeCevapAl("KURYE_TAKIP_SIPARIS_GETIR|" + kAdi);
                             if (durumCvp != null && durumCvp.contains("YOLA_CIKTI")) {
                                 kuryeListModel.addElement("🛵 " + kAdi + " (Yolda)");
@@ -129,6 +115,13 @@ public class KuryeTakipModulu extends JPanel {
                 }
             });
         }).start();
+    }
+
+    public void verileriYenile() {
+        kuryeleriGetir();
+        if (!seciliGercekKuryeAdi.isEmpty()) {
+            siparisleriGetir(seciliGercekKuryeAdi);
+        }
     }
 
     private void siparisleriGetir(String kuryeAdi) {
@@ -144,13 +137,14 @@ public class KuryeTakipModulu extends JPanel {
                     if(!data.equals("BOS") && !data.isEmpty()) {
                         String[] anaBolumler = data.split("===GECMIS===");
 
+                        // 1. AKTİF TESLİMATLAR
                         if (anaBolumler.length > 0 && !anaBolumler[0].trim().isEmpty()) {
                             pnlSiparisler.add(new JLabel("<html><font size='5' color='#2c3e50'><b>🚚 AKTİF TESLİMATLAR</b></font><hr></html>"));
                             String[] siparisler = anaBolumler[0].split("\\|\\|\\|");
                             for (String s : siparisler) {
                                 if (s.trim().isEmpty()) continue;
                                 String[] d = s.split("~_~", -1);
-                                if (d.length >= 4) { 
+                                if (d.length >= 4) { // DÜZELTME: Uzunluk kontrolü esnetildi
                                     if (d[2].equals("YOLA_CIKTI")) yoldaMi = true;
                                     if (d[2].equals("HAZIR") || d[2].equals("BEKLEMEDE")) bekleyenVarMi = true;
                                     String sZaman = (d.length > 4) ? d[4] : "Bilinmiyor";
@@ -160,6 +154,7 @@ public class KuryeTakipModulu extends JPanel {
                             }
                         }
 
+                        // 2. GEÇMİŞ TAMAMLANANLAR
                         if (anaBolumler.length > 1 && !anaBolumler[1].trim().isEmpty()) {
                             pnlSiparisler.add(Box.createVerticalStrut(15));
                             pnlSiparisler.add(new JLabel("<html><font size='5' color='#27ae60'><b>📜 BUGÜN TAMAMLANANLAR</b></font><hr></html>"));
@@ -178,12 +173,13 @@ public class KuryeTakipModulu extends JPanel {
                 }
 
                 if (pnlSiparisler.getComponentCount() == 0) {
-                    JLabel lblBos = new JLabel("<html><br>&nbsp;&nbsp;Bu kurye üzerinde işlem bulunmuyor.</html>");
+                    JLabel lblBos = new JLabel("<html><br>&nbsp;&nbsp;Bu kurye üzerinde herhangi bir işlem bulunmuyor.</html>");
                     lblBos.setFont(new Font("Arial", Font.ITALIC, 16));
                     lblBos.setForeground(Color.GRAY);
                     pnlSiparisler.add(lblBos);
                 }
 
+                // Aksiyon Butonu Mantığı
                 if (yoldaMi) {
                     mevcutKuryeDurumu = "YOLDA";
                     btnKuryeAksiyon.setText("🏠 Merkeze Dönüş Yaptı");
@@ -213,8 +209,7 @@ public class KuryeTakipModulu extends JPanel {
         String komut = mevcutKuryeDurumu.equals("YOLDA") ? "KURYE_MERKEZE_DONDU|" : "KURYE_TOPLU_YOLA_CIKAR|";
         String cvp = anaPanel.sunucuyaKomutGonderVeCevapAl(komut + seciliGercekKuryeAdi);
         JOptionPane.showMessageDialog(this, cvp);
-        kuryeleriGetir();
-        siparisleriGetir(seciliGercekKuryeAdi);
+        verileriYenile();
     }
 
     private JPanel detayliSiparisKarti(String id, String musteri, String durum, String html, String zaman) {
@@ -223,33 +218,45 @@ public class KuryeTakipModulu extends JPanel {
         kart.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(Color.LIGHT_GRAY), BorderFactory.createEmptyBorder(10, 10, 10, 10)));
         kart.setBackground(Color.WHITE);
 
-        JLabel lblInfo = new JLabel("<html><b>Sipariş #" + id + " - " + musteri + "</b><br>Durum: <font color='" + (durum.equals("TESLİM EDİLDİ") ? "green" : "red") + "'>" + durum + "</font></html>");
+        JLabel lblInfo = new JLabel("<html><b>#" + id + " - " + musteri + "</b><br>Durum: " + durum + "</html>");
         kart.add(lblInfo, BorderLayout.CENTER);
 
         JButton btnFis = new JButton("Fişi Gör");
         btnFis.addActionListener(e -> {
             JDialog d = new JDialog();
             d.setTitle("Fiş Detayı #" + id);
-            d.setSize(350, 550);
+            d.setSize(350, 500);
             d.setLocationRelativeTo(this);
-            
             String temiz = html.replaceAll("(?i)<html.*?>|</html>|<body.*?>|</body>", "");
             String full = "<html><body style='font-family:monospace; padding:10px; background:white;'>" +
                           "<div style='border:1px solid #000; padding:10px;'>" +
                           "<center><b>" + ayarMagazaAdi + "</b><br>" + ayarOnBilgi + "<hr></center>" +
                           temiz + "<hr><center>" + ayarAltBilgi + "<br>" + ayarVKN + "<br>Saat: " + zaman + "</center></div></body></html>";
-            
             JEditorPane ep = new JEditorPane("text/html", full);
             ep.setEditable(false);
             d.add(new JScrollPane(ep), BorderLayout.CENTER);
-            
-            JButton p = new JButton("🖨️ Yazdır");
-            p.addActionListener(ex -> { try { ep.print(); } catch (Exception pex) {} });
-            d.add(p, BorderLayout.SOUTH);
             d.setVisible(true);
         });
         kart.add(btnFis, BorderLayout.EAST);
 
         return kart;
+    }
+
+    private void ayarlariYukle() {
+        new Thread(() -> {
+            String cvp = anaPanel.sunucuyaKomutGonderVeCevapAl("TUM_AYARLARI_GETIR");
+            if (cvp != null && cvp.startsWith("AYARLAR|")) {
+                String[] items = cvp.substring(8).split("\\|\\|\\|");
+                for (String a : items) {
+                    String[] kv = a.split("~_~");
+                    if (kv.length == 2) {
+                        if(kv[0].equals("MagazaAdi")) ayarMagazaAdi = kv[1];
+                        if(kv[0].equals("MagazaOnBilgi")) ayarOnBilgi = kv[1];
+                        if(kv[0].equals("MagazaAltBilgi")) ayarAltBilgi = kv[1];
+                        if(kv[0].equals("MagazaVKN")) ayarVKN = kv[1];
+                    }
+                }
+            }
+        }).start();
     }
 }
