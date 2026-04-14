@@ -231,12 +231,6 @@ public class ClientHandler implements Runnable {
                         return DatabaseManager.siparisOlustur(parcalar[1], parcalar[2], parcalar[3], urunlerDatasi);
                     }
                     return "HATA|Eksik parametre!";
-                
-                case "KURYELERI_GETIR":
-                    return DatabaseManager.kuryeListesiGetir();
-                case "KURYE_ATA":
-                    if (parcalar.length >= 3) return DatabaseManager.kuryeAta(Integer.parseInt(parcalar[1]), parcalar[2]);
-                    return "HATA|Eksik parametre!";
                 case "KURYE_SIPARISLERI_GETIR":
                     if (parcalar.length >= 2) return DatabaseManager.kuryeSiparisleriGetir(parcalar[1]);
                     return "HATA|Eksik parametre!";
@@ -263,25 +257,42 @@ public class ClientHandler implements Runnable {
                         return DatabaseManager.vardiyaIslem(islemTipi, personelAdi);
                     }
                     return "HATA|Eksik vardiya parametresi!";
-                case "KURYE_TAKIP_SIPARIS_GETIR":
-                    if (parcalar.length >= 2) return DatabaseManager.kuryeTakipSiparisleriGetir(parcalar[1]);
-                    return "HATA|Eksik parametre!";
-                    
-                case "KURYE_TOPLU_YOLA_CIKAR":
-                    if (parcalar.length >= 2) return DatabaseManager.kuryeTopluYolaCikar(parcalar[1]);
-                    return "HATA|Eksik parametre!";
-                    
-                case "KURYE_MERKEZE_DONDU":
-                    if (parcalar.length >= 2) return DatabaseManager.kuryeMerkezeDondu(parcalar[1]);
-                    return "HATA|Eksik parametre!";
                 case "TUM_AYARLARI_GETIR":
                     return DatabaseManager.tumAyarlariGetir();
                     
                 case "FİS_AYAR_GUNCELLE":
                     if (parcalar.length >= 5) return DatabaseManager.ayarGuncelle(parcalar[1], parcalar[2], parcalar[3], parcalar[4]);
                     return "HATA|Eksik ayar parametresi!";
+
                 case "GUN_SONU_KAPAT":
                     return DatabaseManager.gunSonuKapat();
+                // ==========================================
+                // KURYE İŞLEMLERİ (YENİ VE UYUMLU FORMAT)
+                // ==========================================
+                
+                case "KURYE_TAKIP_SIPARIS_GETIR":
+                case "KURYE_USER_SIPARIS_GETIR":
+                    if (parcalar.length >= 2) return DatabaseManager.kuryeTakipSiparisleriniGetir(parcalar[1]);
+                    return "HATA|Eksik parametre!";
+                
+                case "KURYE_ATA":
+                    if (parcalar.length >= 3) return DatabaseManager.kuryeAta(parcalar[1], parcalar[2]);
+                    return "HATA|Eksik parametre";
+                    
+                case "KURYE_TESLIM_ET":
+                    if (parcalar.length >= 3) return DatabaseManager.kuryeTeslimEt(parcalar[1], parcalar[2]);
+                    return "HATA|Eksik parametre";
+                    
+                case "KURYE_MERKEZE_DONDU":
+                    if (parcalar.length >= 2) return DatabaseManager.kuryeMerkezeDondu(parcalar[1]);
+                    return "HATA|Eksik parametre"; 
+                case "KURYE_TOPLU_YOLA_CIKAR":
+                    if (parcalar.length >= 2) return DatabaseManager.kuryeTopluYolaCikar(parcalar[1]);
+                    return "HATA|Eksik parametre";
+                case "KURYELERI_GETIR":
+                    return DatabaseManager.kuryeListesiGetir();
+                case "MESAIDEKI_KURYELERI_GETIR":
+                    return DatabaseManager.mesaidekiKuryeleriGetir();
                 // ==========================================
                 // BİLİNMEYEN KOMUT
                 // ==========================================

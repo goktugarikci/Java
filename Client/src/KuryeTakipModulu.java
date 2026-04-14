@@ -1,3 +1,5 @@
+
+
 import javax.swing.*;
 import javax.swing.event.ListSelectionEvent;
 import java.awt.*;
@@ -12,7 +14,6 @@ public class KuryeTakipModulu extends JPanel {
     private JButton btnGenelIslem;
     private String seciliKurye = "";
 
-    // Ayarlar
     private String ayarMagazaAdi = "Yükleniyor...";
     private String ayarOnBilgi = "";
     private String ayarAltBilgi = "";
@@ -29,9 +30,11 @@ public class KuryeTakipModulu extends JPanel {
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
         splitPane.setDividerLocation(320);
 
-        // --- SOL PANEL: AKTİF KURYELER ---
+        // ==========================================
+        // SOL PANEL: MESAİDEKİ KURYELER
+        // ==========================================
         JPanel pnlSol = new JPanel(new BorderLayout(5, 5));
-        pnlSol.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(new Color(41, 128, 185), 2), "Aktif Kuryeler", 0, 0, new Font("Arial", Font.BOLD, 14)));
+        pnlSol.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(new Color(41, 128, 185), 2), "Mesaideki Kuryeler", 0, 0, new Font("Arial", Font.BOLD, 14)));
 
         kuryeListModel = new DefaultListModel<>();
         lstKuryeler = new JList<>(kuryeListModel);
@@ -42,16 +45,31 @@ public class KuryeTakipModulu extends JPanel {
         JScrollPane scKurye = new JScrollPane(lstKuryeler);
         pnlSol.add(scKurye, BorderLayout.CENTER);
 
+        JPanel pnlSolButonlar = new JPanel(new GridLayout(2, 1, 5, 5));
+        
+        JButton btnVardiya = new JButton("⏱️ Mesai (Vardiya) Başlat/Bitir");
+        btnVardiya.setFont(new Font("Arial", Font.BOLD, 14));
+        btnVardiya.setBackground(new Color(52, 73, 94));
+        btnVardiya.setForeground(Color.WHITE);
+        btnVardiya.setFocusPainted(false);
+        btnVardiya.addActionListener(e -> vardiyaIslemiYap());
+        
         JButton btnYenile = new JButton("🔄 Listeyi Yenile");
         btnYenile.setFont(new Font("Arial", Font.BOLD, 14));
+        btnYenile.setFocusPainted(false);
         btnYenile.addActionListener(e -> verileriYenile());
-        pnlSol.add(btnYenile, BorderLayout.SOUTH);
+        
+        pnlSolButonlar.add(btnVardiya);
+        pnlSolButonlar.add(btnYenile);
+        pnlSol.add(pnlSolButonlar, BorderLayout.SOUTH);
 
         splitPane.setLeftComponent(pnlSol);
 
-        // --- SAĞ PANEL: SİPARİŞ DETAYLARI ---
+        // ==========================================
+        // SAĞ PANEL: SİPARİŞ DETAYLARI
+        // ==========================================
         JPanel pnlSag = new JPanel(new BorderLayout(10, 10));
-        lblDurumBaslik = new JLabel("📍 Kurye Seçiniz", SwingConstants.LEFT);
+        lblDurumBaslik = new JLabel("📍 Lütfen Listeden Bir Kurye Seçiniz", SwingConstants.LEFT);
         lblDurumBaslik.setFont(new Font("Arial", Font.BOLD, 18));
         pnlSag.add(lblDurumBaslik, BorderLayout.NORTH);
 
@@ -68,7 +86,6 @@ public class KuryeTakipModulu extends JPanel {
         scSiparis.getVerticalScrollBar().setUnitIncrement(16);
         pnlSag.add(scSiparis, BorderLayout.CENTER);
 
-        // Aksiyon Butonu
         btnGenelIslem = new JButton("İşlem Bekleniyor");
         btnGenelIslem.setFont(new Font("Arial", Font.BOLD, 16));
         btnGenelIslem.setEnabled(false);
@@ -82,12 +99,57 @@ public class KuryeTakipModulu extends JPanel {
         kuryeListesiYukle();
     }
 
+    // ==========================================
+    // VARDİYA İŞLEMİ (AÇILIR LİSTE - DROPDOWN)
+    // ==========================================
+    private void vardiyaIslemiYap() {
+        String[] secenekler = {"🟢 Mesai Başlat (GİRİŞ)", "🔴 Mesai Bitir (ÇIKIŞ)"};
+        int secim = JOptionPane.showOptionDialog(this, 
+                "Kurye için hangi vardiya işlemini yapmak istiyorsunuz?", 
+                "Vardiya İşlemi", 
+                JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE, 
+                null, secenekler, secenekler[0]);
+
+        if (secim >= 0) {
+            String islem = secim == 0 ? "GIRIS" : "CIKIS";
+            
+            // Veritabanındaki tüm kuryeleri açılır liste için çek
+            String cvpKuryeler = anaPanel.sunucuyaKomutGonderVeCevapAl("KURYELERI_GETIR");
+            
+            if (cvpKuryeler != null && cvpKuryeler.startsWith("KURYE_LISTESI|")) {
+                String[] parcalar = cvpKuryeler.split("\\|");
+                if (parcalar.length > 1) {
+                    String[] kuryeDizisi = new String[parcalar.length - 1];
+                    System.arraycopy(parcalar, 1, kuryeDizisi, 0, parcalar.length - 1);
+                    
+                    String mesaj = secim == 0 ? "Mesaiye başlayacak kuryeyi seçiniz:" : "Mesaisi bitecek kuryeyi seçiniz:";
+                    
+                    // KULLANICIYA AÇILIR LİSTE (COMBO BOX) GÖSTERİLİR
+                    String secilenKurye = (String) JOptionPane.showInputDialog(this, 
+                            mesaj, "Kurye Seçimi", JOptionPane.QUESTION_MESSAGE, 
+                            null, kuryeDizisi, kuryeDizisi[0]);
+                            
+                    if (secilenKurye != null && !secilenKurye.trim().isEmpty()) {
+                        String cvp = anaPanel.sunucuyaKomutGonderVeCevapAl("VARDIYA_ISLEM|" + islem + "|" + secilenKurye.trim());
+                        JOptionPane.showMessageDialog(this, cvp);
+                        verileriYenile();
+                    }
+                } else {
+                    JOptionPane.showMessageDialog(this, "Sistemde kayıtlı Kurye/Motokurye bulunamadı!", "Uyarı", JOptionPane.WARNING_MESSAGE);
+                }
+            } else {
+                JOptionPane.showMessageDialog(this, "Sunucudan kurye listesi alınamadı!", "Hata", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
     private void kuryeListesiYukle() {
         new Thread(() -> {
-            String cvp = anaPanel.sunucuyaKomutGonderVeCevapAl("KURYELERI_GETIR");
+            // SADECE MESAİDE OLANLARI ÇEKER
+            String cvp = anaPanel.sunucuyaKomutGonderVeCevapAl("MESAIDEKI_KURYELERI_GETIR");
             SwingUtilities.invokeLater(() -> {
                 kuryeListModel.clear();
-                if (cvp != null && cvp.startsWith("KURYE_LISTESI|")) {
+                if (cvp != null && cvp.startsWith("MESAIDEKI_KURYELER|")) {
                     String[] parcalar = cvp.split("\\|");
                     for (int i = 1; i < parcalar.length; i++) {
                         String kAdi = parcalar[i].trim();
@@ -141,10 +203,8 @@ public class KuryeTakipModulu extends JPanel {
                     if (!data.equals("BOS") && !data.trim().isEmpty()) {
                         String[] bolumler = data.split("===GECMIS===");
 
-                        // 1. AKTİF SİPARİŞLER (YOLA ÇIKANLAR VEYA BEKLEYENLER)
                         if (bolumler.length > 0 && !bolumler[0].trim().isEmpty()) {
-                            // DÜZELTME 1: Başlık görünmezliği önlemek için sola hizalandı
-                            JLabel lblBaslik1 = new JLabel("<html><font size='5' color='#e67e22'><b>🚚 AKTİF SİPARİŞLER</b></font><hr></html>");
+                            JLabel lblBaslik1 = new JLabel("<html><div style='padding-top:10px;'><font size='5' color='#e67e22'><b>🚚 AKTİF SİPARİŞLER</b></font><hr></div></html>");
                             lblBaslik1.setAlignmentX(Component.LEFT_ALIGNMENT);
                             pnlKuryeSiparisler.add(lblBaslik1);
                             
@@ -157,6 +217,7 @@ public class KuryeTakipModulu extends JPanel {
                                 String musteri = d.length > 1 ? d[1] : "Bilinmiyor"; 
                                 String durum = d.length > 2 ? d[2] : ""; 
                                 String html = d.length > 3 ? d[3] : "";
+                                String zaman = d.length > 4 ? d[4] : "Bilinmiyor";
 
                                 for (String col : d) {
                                     if(col.contains("YOLA") || col.contains("HAZIR") || col.contains("BEKLE")) durum = col;
@@ -165,17 +226,14 @@ public class KuryeTakipModulu extends JPanel {
                                 if (durum.contains("YOLA_CIKTI")) yoldaMi = true;
                                 if (durum.contains("HAZIR") || durum.contains("BEKLE")) bekleyenVarMi = true;
 
-                                pnlKuryeSiparisler.add(siparisKartiOlustur(id, musteri, durum, html));
+                                pnlKuryeSiparisler.add(siparisKartiOlustur(id, musteri, durum, html, zaman));
                                 pnlKuryeSiparisler.add(Box.createVerticalStrut(10));
                             }
                         }
 
-                        // 2. GEÇMİŞ / TAMAMLANANLAR SİPARİŞLER
                         if (bolumler.length > 1 && !bolumler[1].trim().isEmpty()) {
                             pnlKuryeSiparisler.add(Box.createVerticalStrut(15));
-                            
-                            // DÜZELTME 2: Başlık görünmezliği önlemek için sola hizalandı
-                            JLabel lblBaslik2 = new JLabel("<html><font size='5' color='#27ae60'><b>📜 GEÇMİŞ / TAMAMLANANLAR</b></font><hr></html>");
+                            JLabel lblBaslik2 = new JLabel("<html><div style='padding-top:10px;'><font size='5' color='#27ae60'><b>📜 GEÇMİŞ / TAMAMLANANLAR</b></font><hr></div></html>");
                             lblBaslik2.setAlignmentX(Component.LEFT_ALIGNMENT);
                             pnlKuryeSiparisler.add(lblBaslik2);
                             
@@ -187,8 +245,9 @@ public class KuryeTakipModulu extends JPanel {
                                 String id = d.length > 0 ? d[0] : "?";
                                 String musteri = d.length > 1 ? d[1] : "Bilinmiyor";
                                 String html = d.length > 3 ? d[3] : "";
+                                String zaman = d.length > 4 ? d[4] : "Bilinmiyor";
                                 
-                                pnlKuryeSiparisler.add(siparisKartiOlustur(id, musteri, "TESLİM EDİLDİ", html));
+                                pnlKuryeSiparisler.add(siparisKartiOlustur(id, musteri, "TESLİM EDİLDİ", html, zaman));
                                 pnlKuryeSiparisler.add(Box.createVerticalStrut(10));
                             }
                         }
@@ -196,14 +255,13 @@ public class KuryeTakipModulu extends JPanel {
                 }
 
                 if (pnlKuryeSiparisler.getComponentCount() == 0) {
-                    JLabel lblBos = new JLabel("<html><br>&nbsp;&nbsp;Kurye üzerinde herhangi bir işlem bulunmuyor.</html>");
+                    JLabel lblBos = new JLabel("<html><br>&nbsp;&nbsp;Bu kurye üzerinde herhangi bir işlem bulunmuyor.</html>");
                     lblBos.setFont(new Font("Arial", Font.ITALIC, 16));
                     lblBos.setForeground(Color.GRAY);
                     lblBos.setAlignmentX(Component.LEFT_ALIGNMENT);
                     pnlKuryeSiparisler.add(lblBos);
                 }
 
-                // Alt Butonun Duruma Göre Şekillenmesi
                 if (yoldaMi) {
                     btnGenelIslem.setText("🏠 " + seciliKurye + " Merkeze Dönüş Yaptı (Teslimatları Kapat)");
                     btnGenelIslem.setBackground(new Color(230, 126, 34));
@@ -237,12 +295,9 @@ public class KuryeTakipModulu extends JPanel {
         verileriYenile();
     }
 
-    private JPanel siparisKartiOlustur(String id, String musteri, String durum, String html) {
+    private JPanel siparisKartiOlustur(String id, String musteri, String durum, String html, String zaman) {
         JPanel kart = new JPanel(new BorderLayout(10, 5));
-        
-        // DÜZELTME 3: SİPARİŞ KARTI SOLA HİZALANDI. Bu kod silindiği için kartlar görünmez oluyordu.
         kart.setAlignmentX(Component.LEFT_ALIGNMENT); 
-        
         kart.setMaximumSize(new Dimension(Integer.MAX_VALUE, 80));
         kart.setBackground(new Color(248, 249, 249));
         kart.setBorder(BorderFactory.createCompoundBorder(
@@ -251,20 +306,21 @@ public class KuryeTakipModulu extends JPanel {
         ));
 
         String renk = durum.contains("TESLİM") ? "green" : (durum.contains("YOLA") ? "red" : "orange");
-        String info = "<html><b>#" + id + " - Müşteri: " + musteri + "</b><br>Durum: <font color='" + renk + "'>" + durum + "</font></html>";
+        String info = "<html><b>#" + id + " - Müşteri: " + musteri + "</b><br>Durum: <font color='" + renk + "'>" + durum + "</font> | Zaman: " + formatZaman(zaman) + "</html>";
         
         JLabel lblInfo = new JLabel(info);
         lblInfo.setFont(new Font("Arial", Font.PLAIN, 15));
         kart.add(lblInfo, BorderLayout.CENTER);
 
         JButton btnSec = new JButton("Fişi Gör / Yazdır");
-        btnSec.addActionListener(e -> fisGoster(id, html));
+        btnSec.setFocusPainted(false);
+        btnSec.addActionListener(e -> fisGoster(id, html, zaman));
         kart.add(btnSec, BorderLayout.EAST);
 
         return kart;
     }
 
-    private void fisGoster(String id, String html) {
+    private void fisGoster(String id, String html, String zaman) {
         JDialog d = new JDialog();
         d.setTitle("Fiş Detayı #" + id);
         d.setSize(350, 500);
@@ -274,16 +330,25 @@ public class KuryeTakipModulu extends JPanel {
         String full = "<html><body style='font-family:monospace; padding:10px; background:white;'>" +
                       "<div style='border:1px solid #000; padding:10px;'>" +
                       "<center><b>" + ayarMagazaAdi + "</b><br>" + ayarOnBilgi + "<hr></center>" +
-                      temiz + "<hr><center>" + ayarAltBilgi + "<br>" + ayarVKN + "</center></div></body></html>";
+                      temiz + "<hr><center>" + ayarAltBilgi + "<br>" + ayarVKN + "<br>Kayıt: " + formatZaman(zaman) + "</center></div></body></html>";
         
         JEditorPane ep = new JEditorPane("text/html", full);
         ep.setEditable(false);
         d.add(new JScrollPane(ep), BorderLayout.CENTER);
         
         JButton p = new JButton("🖨️ Yazdır");
+        p.setFont(new Font("Arial", Font.BOLD, 14));
+        p.setBackground(new Color(41, 128, 185));
+        p.setForeground(Color.WHITE);
+        p.setFocusPainted(false);
         p.addActionListener(ex -> { try { ep.print(); } catch (PrinterException pex) {} });
         d.add(p, BorderLayout.SOUTH);
         d.setVisible(true);
+    }
+
+    private String formatZaman(String dt) {
+        if (dt == null || dt.length() < 16) return dt;
+        return dt.substring(11, 16);
     }
 
     private void ayarlariYukle() {
@@ -292,6 +357,7 @@ public class KuryeTakipModulu extends JPanel {
             if (cvpAyar != null && cvpAyar.startsWith("AYARLAR|")) {
                 String[] ayarlar = cvpAyar.substring(8).split("\\|\\|\\|");
                 for (String a : ayarlar) {
+                    if (a.trim().isEmpty()) continue;
                     String[] kv = a.split("~_~");
                     if (kv.length == 2) {
                         if(kv[0].equals("MagazaAdi")) ayarMagazaAdi = kv[1];

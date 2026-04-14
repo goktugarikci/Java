@@ -12,149 +12,44 @@ public class DatabaseManager {
     }
 
     // ==========================================
-    // 1. VERİTABANI VE TABLO KURULUMU
+    // 1. VERİTABANI VE TABLO KURULUMU (OPTİMİZE EDİLDİ)
     // ==========================================
     public static void initialize() {
         try (Connection conn = DriverManager.getConnection(URL);
              Statement stmt = conn.createStatement()) {
             
-            // Yabancı anahtar (Foreign Key) desteğini aktif et
             stmt.execute("PRAGMA foreign_keys = ON;");
                 
-            // Kullanicilar
-            stmt.execute("CREATE TABLE IF NOT EXISTS Kullanicilar (" +
-                    "UserID INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "UserName TEXT NOT NULL UNIQUE, Password TEXT NOT NULL, " +
-                    "FirstName TEXT, LastName TEXT, Role TEXT, " +
-                    "Email TEXT, Phone TEXT, Address TEXT);");
+            // Kullanicilar, Kategoriler, vb. diğer tablolarınız...
+            stmt.execute("CREATE TABLE IF NOT EXISTS Kullanicilar (UserID INTEGER PRIMARY KEY AUTOINCREMENT, UserName TEXT NOT NULL UNIQUE, Password TEXT NOT NULL, FirstName TEXT, LastName TEXT, Role TEXT, Email TEXT, Phone TEXT, Address TEXT);");
+            stmt.execute("CREATE TABLE IF NOT EXISTS Kategoriler (CategoryID INTEGER PRIMARY KEY AUTOINCREMENT, CategoryName TEXT NOT NULL UNIQUE, Description TEXT);");
+            stmt.execute("CREATE TABLE IF NOT EXISTS Urunler (ProductID INTEGER PRIMARY KEY AUTOINCREMENT, CategoryID INTEGER, ProductName TEXT NOT NULL, Description TEXT, Price REAL NOT NULL, StockQuantity INTEGER DEFAULT 0, ImagePath TEXT, KdvOrani REAL DEFAULT 0.0,FOREIGN KEY(CategoryID) REFERENCES Kategoriler(CategoryID));");
+            stmt.execute("CREATE TABLE IF NOT EXISTS UrunMalzemeleri (MalzemeID INTEGER PRIMARY KEY AUTOINCREMENT, UrunID INTEGER, MalzemeAdi TEXT NOT NULL, FOREIGN KEY(UrunID) REFERENCES Urunler(ProductID) ON DELETE CASCADE);");
+            stmt.execute("CREATE TABLE IF NOT EXISTS PersonelVardiya (id INTEGER PRIMARY KEY AUTOINCREMENT, personel_adi TEXT, tarih TEXT, giris_saati TEXT, cikis_saati TEXT, toplam_saat REAL DEFAULT 0, mesai_saati REAL DEFAULT 0, hakedis_tl REAL DEFAULT 0, durum TEXT);");
+            stmt.execute("CREATE TABLE IF NOT EXISTS GunSonuRaporlari (RaporID INTEGER PRIMARY KEY AUTOINCREMENT, Tarih TEXT NOT NULL, Ciro REAL, ToplamSiparis INTEGER, PaketSayisi INTEGER, EveServisSayisi INTEGER, MasaSayisi INTEGER, MasaDetay TEXT, StokDetay TEXT);");
+            stmt.execute("CREATE TABLE IF NOT EXISTS Rezervasyonlar (RezID INTEGER PRIMARY KEY AUTOINCREMENT, MasaIsmi TEXT NOT NULL, MusteriAdi TEXT NOT NULL, Telefon TEXT, Tarih TEXT NOT NULL, Saat TEXT NOT NULL, Notlar TEXT, Durum TEXT DEFAULT 'AKTIF');");
+            stmt.execute("CREATE TABLE IF NOT EXISTS Masalar (MasaID INTEGER PRIMARY KEY AUTOINCREMENT, MasaIsmi TEXT NOT NULL UNIQUE);");
+            stmt.execute("CREATE TABLE IF NOT EXISTS SistemAyarlari (AyarKey TEXT PRIMARY KEY, AyarValue TEXT);");
 
-            // Kategoriler
-            stmt.execute("CREATE TABLE IF NOT EXISTS Kategoriler (" +
-                    "CategoryID INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "CategoryName TEXT NOT NULL UNIQUE, Description TEXT);");
+            // EKSİK OLAN SİPARİŞ GEÇMİŞİ TABLOSU EKLENDİ
+            stmt.execute("CREATE TABLE IF NOT EXISTS SiparisGecmisi (" +
+                         "GecmisID INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                         "OrderID INTEGER, MasaAdi TEXT, FisHTML TEXT, ToplamTutar REAL, " +
+                         "Tarih TEXT, Kurye TEXT, OdemeTuru TEXT, " +
+                         "SiparisZamani TEXT, YolaCikisZamani TEXT, TeslimZamani TEXT, " +
+                         "KapanisZamani DATETIME DEFAULT CURRENT_TIMESTAMP);");
 
-            // Urunler Tablosu
-            stmt.execute("CREATE TABLE IF NOT EXISTS Urunler (" +
-                    "ProductID INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "CategoryID INTEGER, ProductName TEXT NOT NULL, " +
-                    "Description TEXT, Price REAL, Stock INTEGER DEFAULT 100, " +
-                    "KdvRate REAL DEFAULT 18, ImagePath TEXT, " +
-                    "FOREIGN KEY(CategoryID) REFERENCES Kategoriler(CategoryID));");
-
-            // Urun_Malzemeleri Tablosu (Ekle/Çıkar Modifikatörleri İçin)
-            stmt.execute("CREATE TABLE IF NOT EXISTS Urun_Malzemeleri (" +
-                    "MalzemeID INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "ProductID INTEGER, " +
-                    "MalzemeAdi TEXT NOT NULL, " +
-                    "VarsayilanVarMi INTEGER DEFAULT 1, " + 
-                    "EkstraUcret REAL DEFAULT 0, " +
-                    "FOREIGN KEY(ProductID) REFERENCES Urunler(ProductID) ON DELETE CASCADE);");
-
-            // Siparisler
-            stmt.execute("CREATE TABLE IF NOT EXISTS Siparisler (" +
-                    "OrderID INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "UserID INTEGER, OrderType TEXT, TableNumber TEXT, " +
-                    "Status TEXT DEFAULT 'BEKLEMEDE', OrderDate DATETIME DEFAULT CURRENT_TIMESTAMP, " +
-                    "TotalPrice REAL DEFAULT 0, PaymentType TEXT, " +
-                    "FOREIGN KEY(UserID) REFERENCES Kullanicilar(UserID));");
-
-            // Siparis Detaylari
-            stmt.execute("CREATE TABLE IF NOT EXISTS Siparis_Detaylari (" +
-                    "DetailID INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "OrderID INTEGER, ProductID INTEGER, " +
-                    "Quantity INTEGER, UnitPrice REAL, " +
-                    "Modifiers TEXT, " + 
-                    "FOREIGN KEY(OrderID) REFERENCES Siparisler(OrderID), " +
-                    "FOREIGN KEY(ProductID) REFERENCES Urunler(ProductID));");
-
-            // Zaman Logları ve Günlük Raporlar
-            stmt.execute("CREATE TABLE IF NOT EXISTS Siparis_Zaman_Loglari (" +
-                    "LogID INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "OrderID INTEGER, Status TEXT, IslemZamani DATETIME DEFAULT CURRENT_TIMESTAMP, " +
-                    "FOREIGN KEY(OrderID) REFERENCES Siparisler(OrderID));");
-
-            stmt.execute("CREATE TABLE IF NOT EXISTS Gunluk_Raporlar (" +
-                    "RaporID INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "RaporTarihi DATETIME DEFAULT CURRENT_TIMESTAMP, " +
-                    "ToplamCiro REAL, StokHatalari TEXT, KapatanAdmin TEXT);");
-                    
-            // Vestiyer Tablosu (Sadece Masalar İçin)
-            stmt.execute("CREATE TABLE IF NOT EXISTS Vestiyer_Kayitlari (" +
-                    "IslemID INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "MasaNo TEXT NOT NULL, " +
-                    "AskiNumarasi TEXT NOT NULL, " +
-                    "Durum TEXT DEFAULT 'TESLIM_ALINDI', " + 
-                    "KayitZamani DATETIME DEFAULT CURRENT_TIMESTAMP);");
-                    
-            // Masalar Tablosu
-            stmt.execute("CREATE TABLE IF NOT EXISTS Masalar (" +
-                    "MasaID INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "MasaAdi TEXT NOT NULL UNIQUE, " +
-                    "Durum TEXT DEFAULT 'BOS');"); 
-                    
-            // Gerçek Zamanlı Mutfak Siparişleri Tablosu
+            // Mutfak Tablosu (Kurye ve Zaman Sütunları ile)
             stmt.execute("CREATE TABLE IF NOT EXISTS Siparisler_Mutfak (" +
-                    "OrderID INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "MasaIsmi TEXT, " +
-                    "MusteriIsmi TEXT, " +
-                    "Durum TEXT DEFAULT 'BEKLEMEDE', " +
-                    "FisHTML TEXT, " +
-                    "Kurye TEXT DEFAULT 'Atanmadi', " + // KURYE YAMASI
-                    "SiparisZamani DATETIME DEFAULT CURRENT_TIMESTAMP);");
-                    
-            // REZERVASYON TABLOSU
-            stmt.execute("CREATE TABLE IF NOT EXISTS Rezervasyonlar (" +
-                    "RezID INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "MasaIsmi TEXT NOT NULL, " +
-                    "MusteriAdi TEXT NOT NULL, " +
-                    "Telefon TEXT, " +
-                    "Tarih TEXT NOT NULL, " + 
-                    "Saat TEXT NOT NULL, " +  
-                    "Notlar TEXT, " +
-                    "Durum TEXT DEFAULT 'AKTIF');");
-
-            // GÜN SONU (Z RAPORU) TABLOSU
-            stmt.execute("CREATE TABLE IF NOT EXISTS GunSonuRaporlari (" +
-                    "RaporID INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "Tarih TEXT NOT NULL, " +
-                    "Ciro REAL, " +
-                    "ToplamSiparis INTEGER, " +
-                    "PaketSayisi INTEGER, " +
-                    "EveServisSayisi INTEGER, " +
-                    "MasaSayisi INTEGER, " +
-                    "MasaDetay TEXT, " +
-                    "StokDetay TEXT);");
-            stmt.execute("CREATE TABLE IF NOT EXISTS PersonelVardiya ("
-                  + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                  + "personel_adi TEXT,"
-                  + "tarih TEXT,"
-                  + "giris_saati TEXT,"
-                  + "cikis_saati TEXT,"
-                  + "toplam_saat REAL DEFAULT 0,"
-                  + "mesai_saati REAL DEFAULT 0,"
-                  + "hakedis_tl REAL DEFAULT 0,"
-                  + "durum TEXT" // 'AKTIF' veya 'TAMAMLANDI'
-                  + ");");
-            // GÜNLÜK SATIŞLAR VE STOK TABLOLARI
-            stmt.execute("CREATE TABLE IF NOT EXISTS GunlukSatislar (SatisID INTEGER PRIMARY KEY AUTOINCREMENT, UrunAdi TEXT, Adet INTEGER);");
-
-            // ========================================================
-            // EKSİK KOLON YAMALARI (ESKİ VERİTABANINI GÜNCELLEMEK İÇİN)
-            // ========================================================
-            try { stmt.execute("ALTER TABLE Urunler ADD COLUMN Ingredients TEXT;"); } catch (Exception ignored) {} 
-            try { stmt.execute("ALTER TABLE Urunler ADD COLUMN ImagePath TEXT;"); } catch (Exception ignored) {}
-            try { stmt.execute("ALTER TABLE Urunler ADD COLUMN Stock INTEGER DEFAULT 100;"); } catch (Exception ignored) {}
-            try { stmt.execute("ALTER TABLE Kategoriler ADD COLUMN ImagePath TEXT;"); } catch (Exception ignored) {}
-            try { stmt.execute("ALTER TABLE Rezervasyonlar ADD COLUMN Telefon TEXT;"); } catch (Exception ignored) {}
-            try { stmt.execute("ALTER TABLE Rezervasyonlar ADD COLUMN Notlar TEXT;"); } catch (Exception ignored) {}
-            try { stmt.execute("ALTER TABLE Siparisler_Mutfak ADD COLUMN Kurye TEXT DEFAULT 'Atanmadi';"); } catch (Exception ignored) {}
-            try { stmt.execute("ALTER TABLE GunSonuRaporlari ADD COLUMN StokDetay TEXT;"); } catch (Exception ignored) {}
-
-            ilkAdminKoy(conn);
-            System.out.println("Veritabanı Sistemi: Tüm modüller (Kurye, Stok, Z-Raporu vb.) aktif.");
-            
-        } catch (Exception e) {
-            System.err.println("Veritabanı Başlatma Hatası: " + e.getMessage());
+                         "OrderID INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                         "MasaIsmi TEXT, MusteriIsmi TEXT, Durum TEXT DEFAULT 'BEKLEMEDE', " +
+                         "FisHTML TEXT, Kurye TEXT DEFAULT 'Atanmadi', " +
+                         "SiparisZamani DATETIME DEFAULT CURRENT_TIMESTAMP, " +
+                         "YolaCikisZamani DATETIME, TeslimZamani DATETIME);");
+            veritabaniEksiklikleriniGider();
+            System.out.println("Veritabanı tabloları başarıyla yüklendi/kontrol edildi.");
+        } catch (SQLException e) {
+            System.err.println("Veritabanı oluşturma hatası: " + e.getMessage());
         }
     }
 
@@ -163,7 +58,29 @@ public class DatabaseManager {
                      "VALUES ('admin', 'admin123', 'Admin', 'Sistem', 'Yöneticisi')";
         try (Statement stmt = conn.createStatement()) { stmt.execute(sql); } catch (Exception ignored) {}
     }
+    public static void veritabaniEksiklikleriniGider() {
+        try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL);
+             java.sql.Statement stmt = conn.createStatement()) {
+             
+            // 1. Kurye Sütununu Ekle (Hata verirse zaten vardır, catch yoksayar)
+            try {
+                stmt.execute("ALTER TABLE Siparisler_Mutfak ADD COLUMN Kurye TEXT DEFAULT ''");
+            } catch (Exception ignored) {}
 
+            // 2. SiparisGecmisi Tablosunu Kur (Eğer yoksa)
+            String sql = "CREATE TABLE IF NOT EXISTS SiparisGecmisi (" +
+                         "GecmisID INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                         "OrderID INTEGER, MasaAdi TEXT, FisHTML TEXT, ToplamTutar REAL, " +
+                         "Tarih TEXT, Kurye TEXT, OdemeTuru TEXT, " +
+                         "SiparisZamani TEXT, YolaCikisZamani TEXT, TeslimZamani TEXT, " +
+                         "KapanisZamani DATETIME DEFAULT CURRENT_TIMESTAMP)";
+            stmt.execute(sql);
+            
+            System.out.println("✅ Veritabanı Kurye ve Geçmiş altyapısı kontrol edildi/kuruldu.");
+        } catch (Exception e) {
+            System.err.println("Altyapı kontrol hatası: " + e.getMessage());
+        }
+    }
     // ==========================================
     // 2. KULLANICI VE GİRİŞ İŞLEMLERİ
     // ==========================================
@@ -1279,29 +1196,48 @@ public class DatabaseManager {
     }
 
     // ==========================================
-    // 8. KURYE / MOTORCU İŞLEMLERİ
-    // ==========================================
-// ==========================================
-    // 8. KURYE / MOTORCU İŞLEMLERİ
+    // TÜM KURYELERİ GETİRİR (Açılır Liste Seçimi İçin)
     // ==========================================
     public static String kuryeListesiGetir() {
         StringBuilder sb = new StringBuilder("KURYE_LISTESI");
-        
-        // DÜZELTME: Artık veritabanında 'Motokurye' rolüne sahip olanları da bulacak!
-        String sql = "SELECT FirstName FROM Kullanicilar WHERE Role IN ('Motokurye', 'Motorcu', 'Kurye')";
-        
-        try (Connection conn = DriverManager.getConnection(URL); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
-            boolean kuryeVarMi = false;
+        // Role kısmında Kurye veya Motokurye geçen herkesi alır
+        String sql = "SELECT UserName FROM Kullanicilar WHERE Role LIKE '%Kurye%' OR Role = 'Motokurye'";
+
+        try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL);
+             java.sql.Statement stmt = conn.createStatement();
+             java.sql.ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) {
-                kuryeVarMi = true;
-                sb.append("|").append(rs.getString("FirstName")); // Ad Soyad FirstName sütununda tutuluyor
+                sb.append("|").append(rs.getString("UserName"));
             }
-            if (!kuryeVarMi) return "KURYE_LISTESI|Sistemde Kayıtlı Motorcu Yok";
             return sb.toString();
-        } catch (Exception e) { return "HATA|Kuryeler çekilemedi: " + e.getMessage(); }
+        } catch (Exception e) {
+            return "HATA|Kurye listesi alınamadı: " + e.getMessage();
+        }
     }
 
+    // ==========================================
+    // SADECE MESAİDE OLANLARI GETİRİR (Sol Liste İçin)
+    // ==========================================
+    public static String mesaidekiKuryeleriGetir() {
+        StringBuilder sb = new StringBuilder("MESAIDEKI_KURYELER");
+        // Sadece durumu 'GIRIS' olanları çeker. Böylece tarih hatası yaşanmaz.
+        String sql = "SELECT DISTINCT k.UserName FROM Kullanicilar k " +
+                     "INNER JOIN PersonelVardiya v ON k.UserName = v.personel_adi " +
+                     "WHERE (k.Role LIKE '%Kurye%' OR k.Role = 'Motokurye') " +
+                     "AND v.durum = 'GIRIS'";
 
+        try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL);
+             java.sql.Statement stmt = conn.createStatement();
+             java.sql.ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                sb.append("|").append(rs.getString("UserName"));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return "HATA|Mesai listesi alınamadı: " + e.getMessage();
+        }
+    }
+    
     // ==========================================
     // 1. GÜVENLİ ZAMAN SÜTUNLARI OLUŞTURUCU (YENİ)
     // ==========================================
@@ -1315,20 +1251,85 @@ public class DatabaseManager {
             try { st.execute("ALTER TABLE SiparisGecmisi ADD COLUMN TeslimZamani DATETIME"); } catch (Exception ignored) {}
         } catch (Exception ignored) {}
     }
-
-    // ==========================================
-    // 2. KURYE ATAMA (GÜNCELLENDİ)
-    // ==========================================
-    public static String kuryeAta(int orderId, String kuryeAdi) {
-        kuryeZamanSutunlariniEkle();
-        String sqlUpdate = "UPDATE Siparisler_Mutfak SET Kurye = ?, Durum = 'YOLA_CIKTI', YolaCikisZamani = datetime('now', 'localtime') WHERE OrderID = ?";
+    public static String kuryeAta(String orderId, String kuryeAdi) {
+        String sql = "UPDATE Siparisler_Mutfak SET Durum = 'YOLA_CIKTI', Kurye = ? WHERE OrderID = ?";
         try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL);
-             java.sql.PreparedStatement pstmt = conn.prepareStatement(sqlUpdate)) {
-            pstmt.setString(1, kuryeAdi); pstmt.setInt(2, orderId); pstmt.executeUpdate();
-            return "BAŞARILI|Kurye atandı ve yola çıktı.";
-        } catch (Exception e) { return "HATA|Atama işlemi başarısız: " + e.getMessage(); }
+             java.sql.PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, kuryeAdi.trim());
+            pstmt.setInt(2, Integer.parseInt(orderId.trim()));
+            pstmt.executeUpdate();
+            return "BAŞARILI|Sipariş kuryeye atandı.";
+        } catch (Exception e) { return "HATA|Kurye atanamadı: " + e.getMessage(); }
     }
 
+    public static String kuryeTeslimEt(String orderId, String kuryeAdi) {
+        // Siparişi geçmişe taşıyacak olan "siparisOdemeAl" metodunu tetiklemek daha sağlıklıdır, 
+        // ancak sadece durumunu güncelliyorsak:
+        String sql = "UPDATE Siparisler_Mutfak SET Durum = 'TESLIM_EDILDI', TeslimZamani = datetime('now', 'localtime') WHERE OrderID = ? AND Kurye = ?";
+        try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL);
+             java.sql.PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, Integer.parseInt(orderId.trim()));
+            pstmt.setString(2, kuryeAdi.trim());
+            pstmt.executeUpdate();
+            return "BAŞARILI|Sipariş teslim edildi olarak işaretlendi.";
+        } catch (Exception e) { return "HATA|Teslimat kaydedilemedi: " + e.getMessage(); }
+    }
+    // ==========================================
+    // KURYE TAKİP SİPARİŞLERİNİ GETİRME (Sütun Hatası Çözüldü)
+    // ==========================================
+    public static String kuryeTakipSiparisleriniGetir(String kuryeAdi) {
+        StringBuilder aktifSb = new StringBuilder();
+        StringBuilder gecmisSb = new StringBuilder();
+
+        // AKTİF SİPARİŞLER (OrderID kullanılır, ID değil)
+        String sqlAktif = "SELECT OrderID, MusteriIsmi, Durum, FisHTML, SiparisZamani FROM Siparisler_Mutfak " +
+                          "WHERE Kurye = ? AND Durum IN ('YOLA_CIKTI', 'HAZIR', 'BEKLEMEDE', 'HAZIRLANIYOR') " +
+                          "AND date(SiparisZamani) = date('now', 'localtime')";
+        
+        // GEÇMİŞ SİPARİŞLER (Yeni kurduğumuz tablodan çekilir)
+        String sqlGecmis = "SELECT OrderID, MasaAdi as MusteriIsmi, 'TESLIM_EDILDI' as Durum, FisHTML, KapanisZamani as SiparisZamani FROM SiparisGecmisi " +
+                           "WHERE Kurye = ? AND date(KapanisZamani) = date('now', 'localtime')";
+
+        try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL)) {
+            
+            try (java.sql.PreparedStatement pstmtAktif = conn.prepareStatement(sqlAktif)) {
+                pstmtAktif.setString(1, kuryeAdi.trim());
+                java.sql.ResultSet rsAktif = pstmtAktif.executeQuery();
+                while (rsAktif.next()) {
+                    String temizHtml = rsAktif.getString("FisHTML") != null ? rsAktif.getString("FisHTML").replace("\n", " ").replace("|", "").replace("===GECMIS===", "") : "";
+                    aktifSb.append(rsAktif.getInt("OrderID")).append("~_~")
+                           .append(rsAktif.getString("MusteriIsmi") != null ? rsAktif.getString("MusteriIsmi") : "Müşteri").append("~_~")
+                           .append(rsAktif.getString("Durum")).append("~_~")
+                           .append(temizHtml).append("~_~")
+                           .append(rsAktif.getString("SiparisZamani") != null ? rsAktif.getString("SiparisZamani") : "Bilinmiyor")
+                           .append("|||");
+                }
+            }
+
+            try (java.sql.PreparedStatement pstmtGecmis = conn.prepareStatement(sqlGecmis)) {
+                pstmtGecmis.setString(1, kuryeAdi.trim());
+                java.sql.ResultSet rsGecmis = pstmtGecmis.executeQuery();
+                while (rsGecmis.next()) {
+                    String temizHtml = rsGecmis.getString("FisHTML") != null ? rsGecmis.getString("FisHTML").replace("\n", " ").replace("|", "").replace("===GECMIS===", "") : "";
+                    gecmisSb.append(rsGecmis.getInt("OrderID")).append("~_~")
+                           .append(rsGecmis.getString("MusteriIsmi") != null ? rsGecmis.getString("MusteriIsmi") : "Müşteri").append("~_~")
+                           .append("TESLIM_EDILDI").append("~_~")
+                           .append(temizHtml).append("~_~")
+                           .append(rsGecmis.getString("SiparisZamani") != null ? rsGecmis.getString("SiparisZamani") : "Bilinmiyor")
+                           .append("|||");
+                }
+            }
+
+            String aktifStr = aktifSb.toString();
+            String gecmisStr = gecmisSb.toString();
+
+            if (aktifStr.isEmpty() && gecmisStr.isEmpty()) return "KURYE_TAKIP_VERI|BOS";
+            return "KURYE_TAKIP_VERI|" + aktifStr + "===GECMIS===" + gecmisStr;
+
+        } catch (Exception e) {
+            return "HATA|Kurye verisi çekilemedi: " + e.getMessage();
+        }
+    }
     // ==========================================
     // 3. TOPLU YOLA ÇIKIŞ (GÜNCELLENDİ)
     // ==========================================
@@ -1357,35 +1358,43 @@ public class DatabaseManager {
         } catch (Exception e) { return "HATA|İşlem başarısız: " + e.getMessage(); }
     }
 
-    // ==========================================
-    // KASADAN ÖDEME ALMA VE ARŞİVLEME
-    // ==========================================
     public static String siparisOdemeAl(int orderId, String odemeTuru, String tutar) {
-        kuryeZamanSutunlariniEkle();
-        
-        // DÜZELTME: Sadece ODENDI yapmakla kalmıyor, normal masa ise o anki saati "Tamamlanma Saati" olarak veritabanına işliyor
         String sqlUpdate = "UPDATE Siparisler_Mutfak SET Durum = 'ODENDI', TeslimZamani = COALESCE(TeslimZamani, datetime('now', 'localtime')) WHERE OrderID = ?";
         
         String sqlInsertGecmis = "INSERT INTO SiparisGecmisi (OrderID, MasaAdi, FisHTML, ToplamTutar, Tarih, Kurye, OdemeTuru, SiparisZamani, YolaCikisZamani, TeslimZamani) " +
                                  "SELECT OrderID, MasaIsmi, FisHTML, ?, datetime('now', 'localtime'), Kurye, ?, SiparisZamani, YolaCikisZamani, TeslimZamani " +
                                  "FROM Siparisler_Mutfak WHERE OrderID = ?";
+                                 
+        String sqlDeleteMutfak = "DELETE FROM Siparisler_Mutfak WHERE OrderID = ?";
+
         try (java.sql.Connection conn = java.sql.DriverManager.getConnection(URL)) {
+            // 1. Durumu Güncelle
             try (java.sql.PreparedStatement pstmt = conn.prepareStatement(sqlUpdate)) { 
                 pstmt.setInt(1, orderId); 
                 pstmt.executeUpdate(); 
             }
+            
+            // 2. Geçmiş Tablosuna Aktar
             try (java.sql.PreparedStatement pstmt2 = conn.prepareStatement(sqlInsertGecmis)) {
                 double miktar = 0.0;
                 try { miktar = Double.parseDouble(tutar.replace(",", ".")); } catch (Exception ignored) {}
-                pstmt2.setDouble(1, miktar); 
-                pstmt2.setString(2, odemeTuru); 
-                pstmt2.setInt(3, orderId); 
+                pstmt2.setDouble(1, miktar);
+                pstmt2.setString(2, odemeTuru);
+                pstmt2.setInt(3, orderId);
                 pstmt2.executeUpdate();
             }
-            return "BAŞARILI|Sipariş kapatıldı ve " + tutar + " TL Z Raporu cirosuna eklendi!";
-        } catch (Exception e) { return "HATA|Ödeme alınamadı: " + e.getMessage(); }
+            
+            // 3. (Opsiyonel) Temiz bir geçmiş için eski kaydı mutfaktan silebilirsiniz. Ancak sisteminiz silmiyorsa bu adımı atlayabilirsiniz.
+            try (java.sql.PreparedStatement pstmt3 = conn.prepareStatement(sqlDeleteMutfak)) {
+                pstmt3.setInt(1, orderId);
+                pstmt3.executeUpdate();
+            }
+            
+            return "BAŞARILI|Ödeme başarıyla alındı ve sipariş kapatıldı.";
+        } catch (Exception e) {
+            return "HATA|Ödeme alınamadı: " + e.getMessage();
+        }
     }
-
     // ==========================================
     // 6. KURYE TAKİP VERİLERİNİ GETİRİR (GÜNCELLENDİ)
     // ==========================================

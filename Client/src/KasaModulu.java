@@ -158,30 +158,37 @@ public class KasaModulu extends JPanel {
         btnYolaCikti.addActionListener(e -> {
             if (seciliSiparisId.isEmpty()) return;
 
-            // Sunucudan aktif kuryeleri iste
-            String kuryelerCvp = sunucuyaKomutGonderVeCevapAl("KURYELERI_GETIR");
+            // DÜZELTME: Artık "KURYELERI_GETIR" değil, sadece mesaisi açık olanları çekiyoruz
+            String kuryelerCvp = anaPanel.sunucuyaKomutGonderVeCevapAl("MESAIDEKI_KURYELERI_GETIR");
             
-            if (kuryelerCvp != null && kuryelerCvp.startsWith("KURYE_LISTESI|")) {
+            if (kuryelerCvp != null && kuryelerCvp.startsWith("MESAIDEKI_KURYELER|")) {
                 String[] parcalar = kuryelerCvp.split("\\|");
+                
+                // Eğer mesaide hiç kurye yoksa kasiyeri uyar ve işlemi iptal et
                 if (parcalar.length <= 1) {
-                    JOptionPane.showMessageDialog(this, "Sistemde aktif kurye bulunamadı!");
+                    JOptionPane.showMessageDialog(this, 
+                        "Şu anda mesaisi (vardiyası) açık olan hiçbir kurye bulunmuyor!\nLütfen önce Kurye Takip panelinden kurye mesaisini başlatın.", 
+                        "Aktif Kurye Yok", JOptionPane.WARNING_MESSAGE);
                     return;
                 }
 
-                // Listeyi diziye çevir
+                // Listeyi açılır menü (dizi) formatına çevir
                 String[] kuryeListesi = new String[parcalar.length - 1];
                 System.arraycopy(parcalar, 1, kuryeListesi, 0, parcalar.length - 1);
 
-                // Kurye Seçim Diyaloğu
+                // Kurye Seçim Diyaloğu (Sadece mesaidekiler listelenir)
                 String secilen = (String) JOptionPane.showInputDialog(this, 
                         "Siparişi Teslim Edecek Kuryeyi Seçin:", "Kurye Ata",
                         JOptionPane.QUESTION_MESSAGE, null, kuryeListesi, kuryeListesi[0]);
 
                 if (secilen != null) {
                     // Sunucuya atama komutunu gönder
-                    sunucuyaKomutGonderVeCevapAl("KURYE_ATA|" + seciliSiparisId + "|" + secilen);
-                    verileriYenile(); // Tabloyu güncelle (Sarıdan Kırmızıya dönecek)
+                    String cvp = anaPanel.sunucuyaKomutGonderVeCevapAl("KURYE_ATA|" + seciliSiparisId + "|" + secilen);
+                    JOptionPane.showMessageDialog(this, cvp);
+                    verileriYenile(); // Kasa tablosunu güncelle (Sarıdan kırmızıya döner)
                 }
+            } else {
+                JOptionPane.showMessageDialog(this, "Sunucudan kurye listesi alınamadı!");
             }
         });
 
